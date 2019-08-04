@@ -2,6 +2,7 @@
 #define LMIC_HAL_H_
 
 #include <stdint.h>
+#include "driver/spi_master.h"
 
 typedef struct lmic_pinmap
 {

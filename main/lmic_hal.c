@@ -1,3 +1,5 @@
+#include "lmic_hal.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "esp_log.h"
@@ -6,7 +8,6 @@
 #include "driver/timer.h"
 #include "lmic.h"
 
-#include "lmic_hal.h"
 #include "lora.h"
 
 static const char *TAG = "lmic_hal";
@@ -48,12 +49,6 @@ static void IRAM_ATTR dio_isr_handler(void *arg)
     if (higherPrioTaskWoken) portYIELD_FROM_ISR();
 }
 
-void lcd_spi_pre_transfer_callback(spi_transaction_t *t)
-{
-    int dc = (int) t->user;
-    gpio_set_level(lmic_pins.nss, dc);
-}
-
 void hal_init_ex(const void *pContext)
 {
     wake_queue = xQueueCreate(12, sizeof(wake_t));
@@ -86,7 +81,7 @@ void hal_init_ex(const void *pContext)
     gpio_set_intr_type((gpio_num_t) lmic_pins.dio1, GPIO_INTR_POSEDGE);
     gpio_isr_handler_add((gpio_num_t) lmic_pins.dio1, dio_isr_handler, (void *) (int) WAKE_DIO1);
 
-// @formatter:off
+    // @formatter:off
     spi_device_interface_config_t spi_dev_cfg = {
         .mode = 1,
         .clock_speed_hz = 10000000,
@@ -96,10 +91,10 @@ void hal_init_ex(const void *pContext)
         .queue_size = 1,
         .cs_ena_posttrans = 2
     };
-// @formatter:on
+    // @formatter:on
     ESP_ERROR_CHECK(spi_bus_add_device(lmic_pins.spi_host, &spi_dev_cfg, &spi_handle));
 
-// @formatter:off
+    // @formatter:off
     timer_config_t timer_config = {
             .alarm_en = false,
             .counter_en = false,
@@ -108,7 +103,7 @@ void hal_init_ex(const void *pContext)
             .auto_reload = false,
             .divider = 1280
     };
-// @formatter:on
+    // @formatter:on
     timer_init(TIMER_GROUP_0, TIMER_0, &timer_config);
     timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0x0);
     timer_isr_register(TIMER_GROUP_0, TIMER_0, timer_isr_handler, NULL, ESP_INTR_FLAG_IRAM, NULL);
@@ -137,20 +132,20 @@ void hal_pin_rst(u1_t val)
 
 void hal_spi_write(u1_t cmd, const u1_t *buf, size_t len)
 {
-// @formatter:off
+    // @formatter:off
     spi_transaction_t t = {
             .addr = cmd,
             .length = 8 * len,
             .tx_buffer = buf
     };
-// @formatter:on
+    // @formatter:on
     ESP_ERROR_CHECK(spi_device_transmit(spi_handle, &t));
 }
 
 void hal_spi_read(u1_t cmd, u1_t *buf, size_t len)
 {
     memset(buf, 0, len);
-// @formatter:off
+    // @formatter:off
     spi_transaction_t t = {
             .addr = cmd,
             .length = 8 * len,
@@ -158,7 +153,7 @@ void hal_spi_read(u1_t cmd, u1_t *buf, size_t len)
             .tx_buffer = buf,
             .rx_buffer = buf
     };
-// @formatter:on
+    // @formatter:on
     ESP_ERROR_CHECK(spi_device_transmit(spi_handle, &t));
 }
 

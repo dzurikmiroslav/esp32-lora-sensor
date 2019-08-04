@@ -1,3 +1,5 @@
+#include "bme.h"
+
 #include <math.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -5,8 +7,7 @@
 #include "rom/ets_sys.h"
 #include "bme280.h"
 
-#include "bme.h"
-#include "i2c.h"
+#include "peripherals.h"
 
 static const char *TAG = "bme";
 
@@ -18,7 +19,7 @@ static const char *TAG = "bme";
 #define ACK_VAL 0x0                /*!< I2C ack value */
 #define NACK_VAL 0x1               /*!< I2C nack value */
 
-struct bme280_dev bme280;
+static struct bme280_dev bme280;
 
 static void bme_delay_ms(uint32_t period)
 {

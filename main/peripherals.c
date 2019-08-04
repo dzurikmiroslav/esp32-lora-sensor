@@ -1,16 +1,25 @@
-#include "esp_log.h"
+#include "peripherals.h"
+
+#include "driver/spi_master.h"
 #include "driver/i2c.h"
 
-#include "i2c.h"
-
-#define I2C_SDA             17
-#define I2C_SCL             16
 #define I2C_MASTER_NUM      1
 #define I2C_MASTER_FREQ_HZ  100000
 #define ACK_CHECK_EN        0x1 /*!< I2C master will check ack from slave*/
 #define ACK_CHECK_DIS       0x0 /*!< I2C master will not check ack from slave */
 #define ACK_VAL             0x0 /*!< I2C ack value */
 #define NACK_VAL            0x1 /*!< I2C nack value */
+
+void spi_init()
+{
+    spi_bus_config_t spi_cfg = {0};
+    spi_cfg.miso_io_num = SPI_MISO;
+    spi_cfg.mosi_io_num = SPI_MOSI;
+    spi_cfg.sclk_io_num = SPI_SCLK;
+    spi_cfg.quadwp_io_num = -1;
+    spi_cfg.quadhd_io_num = -1;
+    ESP_ERROR_CHECK(spi_bus_initialize(HSPI_HOST, &spi_cfg, 1));
+}
 
 void i2c_init()
 {

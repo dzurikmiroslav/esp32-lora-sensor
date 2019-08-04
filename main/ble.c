@@ -1,3 +1,5 @@
+#include "ble.h"
+
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "esp_log.h"
@@ -9,12 +11,11 @@
 #include "esp_gatt_common_api.h"
 #include "nvs.h"
 
-#include "ble.h"
 #include "storage_key.h"
 
 static const char *TAG = "ble";
 
-#define DEVICE_NAME "ESP_LORA"
+#define DEVICE_NAME "ESP32 LoRa Sensor"
 #define PROFILE_APP_ID 0
 
 #define ADV_CONFIG_FLAG (1 << 0)
@@ -71,7 +72,6 @@ static esp_ble_adv_params_t adv_params = {
         .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
 
-
 enum
 {
     LORA_IDX_SVC,
@@ -92,9 +92,17 @@ enum
     LORA_IDX_CHAR_VAL_DEV_KEY,
     LORA_IDX_CHAR_CFG_DEV_KEY,
 
+    LORA_IDX_CHAR_PROFILE,
+    LORA_IDX_CHAR_VAL_PROFILE,
+    LORA_IDX_CHAR_CFG_PROFILE,
+
     LORA_IDX_CHAR_PAYL_FMT,
     LORA_IDX_CHAR_VAL_PAYL_FMT,
     LORA_IDX_CHAR_CFG_PAYL_FMT,
+
+    LORA_IDX_CHAR_CONFM,
+    LORA_IDX_CHAR_VAL_CONFM,
+    LORA_IDX_CHAR_CFG_CONFM,
 
     LORA_IDX_NB
 };
@@ -136,7 +144,9 @@ static const uint16_t GATTS_CHAR_UUID_PERIOD        = 0xC901;
 static const uint16_t GATTS_CHAR_UUID_APP_EUI       = 0xC902;
 static const uint16_t GATTS_CHAR_UUID_DEV_EUI       = 0xC903;
 static const uint16_t GATTS_CHAR_UUID_DEV_KEY       = 0xC904;
-static const uint16_t GATTS_CHAR_UUID_PAYL_FMT      = 0xC905;
+static const uint16_t GATTS_CHAR_UUID_PROFILE       = 0xC905;
+static const uint16_t GATTS_CHAR_UUID_PAYL_FMT      = 0xC906;
+static const uint16_t GATTS_CHAR_UUID_CONFM         = 0xC907;
 static const uint16_t GATTS_CHAR_UUID_HUM           = 0x2A6F;
 static const uint16_t GATTS_CHAR_UUID_TEMP          = 0x2A6E;
 static const uint16_t GATTS_CHAR_UUID_PRESS         = 0x2A6D;
@@ -157,7 +167,11 @@ static uint8_t app_eui_ccc[2] = {0x00, 0x00};
 
 static uint8_t dev_key_ccc[2] = {0x00, 0x00};
 
+static uint8_t profile_ccc[2] = {0x00, 0x00};
+
 static uint8_t payl_fmt_ccc[2] = {0x00, 0x00};
+
+static uint8_t confm_ccc[2] = {0x00, 0x00};
 
 static uint8_t bat_lvl_val = 0;
 static uint8_t bat_lvl_ccc[2] = {0x00, 0x00};
@@ -170,7 +184,6 @@ static uint8_t temp_ccc[2] = {0x00, 0x00};
 
 static uint32_t press_val = 0;
 static uint8_t press_ccc[2] = {0x00, 0x00};
-
 
 static const esp_gatts_attr_db_t gatt_lora_db[LORA_IDX_NB] = {
     [LORA_IDX_SVC] =
@@ -204,12 +217,26 @@ static const esp_gatts_attr_db_t gatt_lora_db[LORA_IDX_NB] = {
     [LORA_IDX_CHAR_CFG_DEV_KEY] =
          {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)dev_key_ccc}},
 
+    [LORA_IDX_CHAR_PROFILE] =
+         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_write}},
+    [LORA_IDX_CHAR_VAL_PROFILE] =
+         {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_PROFILE, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint8_t), 0, NULL}},
+    [LORA_IDX_CHAR_CFG_PROFILE] =
+         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)profile_ccc}},
+
     [LORA_IDX_CHAR_PAYL_FMT] =
          {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_write}},
     [LORA_IDX_CHAR_VAL_PAYL_FMT] =
          {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_PAYL_FMT, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint8_t), 0, NULL}},
     [LORA_IDX_CHAR_CFG_PAYL_FMT] =
          {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)payl_fmt_ccc}},
+
+    [LORA_IDX_CHAR_CONFM] =
+         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_write}},
+    [LORA_IDX_CHAR_VAL_CONFM] =
+         {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_CONFM, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint8_t), 0, NULL}},
+    [LORA_IDX_CHAR_CFG_CONFM] =
+         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)confm_ccc}},
 
 };
 
@@ -250,9 +277,7 @@ static const esp_gatts_attr_db_t gatt_bat_serv_db[BAT_SERV_IDX_NB] = {
     [BAT_SERV_IDX_CHAR_CFG_BAT_LVL] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)bat_lvl_ccc}},
 };
-
-// @formatter:on
-
+//@formatter:on
 uint16_t lora_handle_table[LORA_IDX_NB];
 uint16_t bat_serv_handle_table[BAT_SERV_IDX_NB];
 uint16_t env_sens_handle_table[ENV_SENS_IDX_NB];
@@ -281,9 +306,15 @@ void gatts_read(esp_gatt_if_t gatts_if, struct gatts_read_evt_param read)
     } else if (read.handle == lora_handle_table[LORA_IDX_CHAR_VAL_DEV_KEY]) {
         rsp.attr_value.len = length = sizeof(uint8_t) * 16;
         nvs_get_blob(storage, STORAGE_KEY_DEV_KEY, (void*) rsp.attr_value.value, &length);
+    } else if (read.handle == lora_handle_table[LORA_IDX_CHAR_VAL_PROFILE]) {
+        rsp.attr_value.len = sizeof(uint8_t);
+        nvs_get_u8(storage, STORAGE_KEY_PROFILE, (uint8_t*) rsp.attr_value.value);
     } else if (read.handle == lora_handle_table[LORA_IDX_CHAR_VAL_PAYL_FMT]) {
         rsp.attr_value.len = sizeof(uint8_t);
         nvs_get_u8(storage, STORAGE_KEY_PAYL_FMT, (uint8_t*) rsp.attr_value.value);
+    } else if (read.handle == lora_handle_table[LORA_IDX_CHAR_VAL_CONFM]) {
+        rsp.attr_value.len = sizeof(uint8_t);
+        nvs_get_u8(storage, STORAGE_KEY_CONFM, (uint8_t*) rsp.attr_value.value);
     }
 
     if (rsp.attr_value.len > 0) {
@@ -312,10 +343,20 @@ void gatts_write(esp_gatt_if_t gatts_if, struct gatts_write_evt_param write)
         nvs_set_blob(storage, STORAGE_KEY_DEV_KEY, write.value, 16 * sizeof(uint8_t));
         ble_event = BLE_EVENT_LORA_UPDATED;
         xQueueSend(ble_event_queue, &ble_event, 0);
+    } else if (write.handle == lora_handle_table[LORA_IDX_CHAR_VAL_PROFILE]) {
+        uint8_t val;
+        memcpy(&val, write.value, sizeof(uint8_t));
+        nvs_set_u8(storage, STORAGE_KEY_PROFILE, val);
+        ble_event = BLE_EVENT_PROFILE_UPDATE;
+        xQueueSend(ble_event_queue, &ble_event, 0);
     } else if (write.handle == lora_handle_table[LORA_IDX_CHAR_VAL_PAYL_FMT]) {
         uint8_t val;
         memcpy(&val, write.value, sizeof(uint8_t));
         nvs_set_u8(storage, STORAGE_KEY_PAYL_FMT, val);
+    } else if (write.handle == lora_handle_table[LORA_IDX_CHAR_VAL_CONFM]) {
+        uint8_t val;
+        memcpy(&val, write.value, sizeof(uint8_t));
+        nvs_set_u8(storage, STORAGE_KEY_CONFM, val);
     }
 
     if (write.need_rsp) {
@@ -449,27 +490,27 @@ void ble_deinit()
     vQueueDelete(ble_event_queue);
 }
 
-void ble_set_telemetry(float humidity, float temperature, float pressure)
+void ble_set_enviromental(float humidity, float temperature, float pressure)
 {
     hum_val = humidity * 100;
     temp_val = temperature * 100;
     press_val = pressure * 10;
 
     esp_ble_gatts_set_attr_value(env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_HUM], sizeof(uint16_t),
-            (uint8_t *) &hum_val);
+            (uint8_t*) &hum_val);
     esp_ble_gatts_set_attr_value(env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_TEMP], sizeof(int16_t),
-            (uint8_t *) &temp_val);
+            (uint8_t*) &temp_val);
     esp_ble_gatts_set_attr_value(env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_PRESS], sizeof(uint32_t),
-            (uint8_t *) &press_val);
+            (uint8_t*) &press_val);
     esp_ble_gatts_set_attr_value(bat_serv_handle_table[BAT_SERV_IDX_CHAR_VAL_BAT_LVL], sizeof(uint8_t),
-            (uint8_t *) &bat_lvl_val);
+            (uint8_t*) &bat_lvl_val);
 
     if (ble_has_connection) {
         esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_HUM],
-                sizeof(uint16_t), (uint8_t *) &hum_val, false);
+                sizeof(uint16_t), (uint8_t*) &hum_val, false);
         esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_TEMP],
-                sizeof(int16_t), (uint8_t *) &temp_val, false);
+                sizeof(int16_t), (uint8_t*) &temp_val, false);
         esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_PRESS],
-                sizeof(uint32_t), (uint8_t *) &press_val, false);
+                sizeof(uint32_t), (uint8_t*) &press_val, false);
     }
 }

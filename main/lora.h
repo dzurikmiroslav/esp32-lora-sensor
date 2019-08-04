@@ -15,7 +15,7 @@ void lora_start_joining();
 
 void lora_deinit();
 
-void lora_send(float humidity, float temperature, float pressure, uint8_t battery);
+void lora_send(const uint8_t* payload, size_t length);
 
 void lora_get_counters(uint32_t* seqno_up, uint32_t* seqno_dw);
 

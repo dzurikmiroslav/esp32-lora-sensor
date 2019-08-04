@@ -8,6 +8,8 @@
 #define STORAGE_KEY_DEV_KEY     "dev_kei"
 #define STORAGE_KEY_PERIOD      "period"
 #define STORAGE_KEY_PAYL_FMT    "payl_fmt"
+#define STORAGE_KEY_CONFM       "confm"
+#define STORAGE_KEY_PROFILE     "profile"
 
 extern nvs_handle storage;
 

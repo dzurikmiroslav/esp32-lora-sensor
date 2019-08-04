@@ -1,3 +1,5 @@
+#include "lora.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -7,32 +9,10 @@
 #include "lmic.h"
 #include "nvs.h"
 
-#include "lora.h"
 #include "lmic_hal.h"
 #include "storage_key.h"
 
 static const char *TAG = "lora";
-
-#define CAYENNE_LPP_DIGITAL_INPUT            (0U)   /* 1 byte */
-#define CAYENNE_LPP_DIGITAL_OUTPUT           (1U)   /* 1 byte */
-#define CAYENNE_LPP_ANALOG_INPUT             (2U)   /* 2 bytes, 0.01 signed */
-#define CAYENNE_LPP_ANALOG_OUTPUT            (3U)   /* 2 bytes, 0.01 signed */
-#define CAYENNE_LPP_LUMINOSITY               (101U) /* 2 bytes, 1 lux unsigned */
-#define CAYENNE_LPP_PRESENCE                 (102U) /* 1 byte, 1 */
-#define CAYENNE_LPP_TEMPERATURE              (103U) /* 2 bytes, 0.1°C signed */
-#define CAYENNE_LPP_RELATIVE_HUMIDITY        (104U) /* 1 byte, 0.5% unsigned */
-#define CAYENNE_LPP_ACCELEROMETER            (113U) /* 2 bytes per axis, 0.001G */
-#define CAYENNE_LPP_BAROMETRIC_PRESSURE      (115U) /* 2 bytes 0.1 hPa Unsigned */
-#define CAYENNE_LPP_GYROMETER                (134U) /* 2 bytes per axis, 0.01 °/s */
-#define CAYENNE_LPP_GPS                      (136U) /* 3 byte lon/lat 0.0001 °, 3 bytes alt 0.01 meter */
-
-typedef struct
-{
-    uint16_t humidity;
-    int16_t temperature;
-    uint32_t pressure;
-    uint8_t battery;
-}__attribute__((packed)) native_payload_t;
 
 static TaskHandle_t runloop_task;
 
@@ -40,19 +20,19 @@ static SemaphoreHandle_t send_semhr;
 
 QueueHandle_t lora_join_queue;
 
-void os_getArtEui(u1_t* buf)
+void os_getArtEui(u1_t *buf)
 {
     size_t length = sizeof(uint8_t) * 8;
     nvs_get_blob(storage, STORAGE_KEY_APP_EUI, (void*) buf, &length);
 }
 
-void os_getDevEui(u1_t* buf)
+void os_getDevEui(u1_t *buf)
 {
     size_t length = sizeof(uint8_t) * 8;
     nvs_get_blob(storage, STORAGE_KEY_DEV_EUI, (void*) buf, &length);
 }
 
-void os_getDevKey(u1_t* buf)
+void os_getDevKey(u1_t *buf)
 {
     size_t length = sizeof(uint8_t) * 16;
     nvs_get_blob(storage, STORAGE_KEY_DEV_KEY, (void*) buf, &length);
@@ -61,11 +41,11 @@ void os_getDevKey(u1_t* buf)
 void onEvent(ev_t ev)
 {
     bool join_status;
-    ESP_LOGD(TAG, "Lora event %d", ev);
+    ESP_LOGI(TAG, "Lora event %d", ev);
     switch (ev) {
         case EV_JOINED:
             LMIC_setLinkCheckMode(0);
-            LMIC.dn2Dr = DR_SF9;
+            //LMIC.dn2Dr = DR_SF9;
 
             join_status = true;
             xQueueSend(lora_join_queue, &join_status, portMAX_DELAY);
@@ -147,7 +127,7 @@ void lora_start_joining()
     lmic_hal_leave_critical();
 }
 
-void lora_get_counters(uint32_t* seqno_up, uint32_t* seqno_dw)
+void lora_get_counters(uint32_t *seqno_up, uint32_t *seqno_dw)
 {
     *seqno_up = LMIC.seqnoUp;
     *seqno_dw = LMIC.seqnoDn;
@@ -167,6 +147,8 @@ void lora_set_session(uint32_t dev_addr, uint8_t *nwk_key, uint8_t *art_key, uin
     LMIC_setSession(0x1, dev_addr, nwk_key, art_key);
     LMIC_setLinkCheckMode(0);
     LMIC.dn2Dr = DR_SF9;
+    LMIC_setDrTxpow(DR_SF7, 14);
+
     LMIC.seqnoUp = seqno_up;
     LMIC.seqnoDn = seqno_dw;
 
@@ -174,54 +156,69 @@ void lora_set_session(uint32_t dev_addr, uint8_t *nwk_key, uint8_t *art_key, uin
     lmic_hal_leave_critical();
 }
 
-void lora_send(float humidity, float temperature, float pressure, uint8_t battery)
+void lora_send(const uint8_t *payload, size_t length)
 {
-    uint8_t format;
-    nvs_get_u8(storage, STORAGE_KEY_PAYL_FMT, &format);
-
-    uint8_t len = 0;
-
-    if (format == 1) {
-        //cayenne lpp payload
-        uint8_t humidity_val = humidity * 2;
-        int16_t temperature_val = temperature * 10;
-        uint16_t pressure_val = pressure / 100 * 10;
-        int16_t battery_val = battery * 100;
-
-        LMIC.frame[len++] = 1;
-        LMIC.frame[len++] = CAYENNE_LPP_RELATIVE_HUMIDITY;
-        LMIC.frame[len++] = humidity_val;
-        LMIC.frame[len++] = 2;
-        LMIC.frame[len++] = CAYENNE_LPP_TEMPERATURE;
-        LMIC.frame[len++] = temperature_val >> 8;
-        LMIC.frame[len++] = temperature_val;
-        LMIC.frame[len++] = 3;
-        LMIC.frame[len++] = CAYENNE_LPP_BAROMETRIC_PRESSURE;
-        LMIC.frame[len++] = pressure_val >> 8;
-        LMIC.frame[len++] = pressure_val;
-        LMIC.frame[len++] = 4;
-        LMIC.frame[len++] = CAYENNE_LPP_ANALOG_OUTPUT;
-        LMIC.frame[len++] = battery_val >> 8;
-        LMIC.frame[len++] = battery_val;
-    } else {
-        //native payload
-        native_payload_t payload;
-        payload.humidity = humidity * 100;
-        payload.temperature = temperature * 100;
-        payload.pressure = pressure * 100;
-        payload.battery = battery;
-
-        memcpy(&LMIC.frame[0], &payload, sizeof(native_payload_t));
-        len = sizeof(native_payload_t);
-    }
+    uint8_t confirmed = 0;
+    nvs_get_u8(storage, STORAGE_KEY_CONFM, &confirmed);
 
     lmic_hal_enter_critical();
 
-    LMIC_setTxData2(1, LMIC.frame, len, 0);
+    LMIC_setTxData2(1, payload, length, confirmed);
 
     lmic_hal_wakeup();
     lmic_hal_leave_critical();
 
     xSemaphoreTake(send_semhr, portMAX_DELAY);
 }
+
+//void lora_send(float humidity, float temperature, float pressure, uint8_t battery)
+//{
+//    uint8_t format = 0;
+//    nvs_get_u8(storage, STORAGE_KEY_PAYL_FMT, &format);
+//    uint8_t confirmed = 0;
+//    nvs_get_u8(storage, STORAGE_KEY_CONFM, &confirmed);
+//
+//    uint8_t len = 0;
+//
+//    if (format == 1) {
+//        //cayenne lpp payload
+//        uint8_t humidity_val = humidity * 2;
+//        int16_t temperature_val = temperature * 10;
+//        uint16_t pressure_val = pressure / 100 * 10;
+//
+//        LMIC.frame[len++] = 1;
+//        LMIC.frame[len++] = CAYENNE_LPP_RELATIVE_HUMIDITY;
+//        LMIC.frame[len++] = humidity_val;
+//        LMIC.frame[len++] = 2;
+//        LMIC.frame[len++] = CAYENNE_LPP_TEMPERATURE;
+//        LMIC.frame[len++] = temperature_val >> 8;
+//        LMIC.frame[len++] = temperature_val;
+//        LMIC.frame[len++] = 3;
+//        LMIC.frame[len++] = CAYENNE_LPP_BAROMETRIC_PRESSURE;
+//        LMIC.frame[len++] = pressure_val >> 8;
+//        LMIC.frame[len++] = pressure_val;
+//        LMIC.frame[len++] = 4;
+//        LMIC.frame[len++] = CAYENNE_LPP_DIGITAL_OUTPUT;
+//        LMIC.frame[len++] = battery;
+//    } else {
+//        //native payload
+//        native_payload_t payload;
+//        payload.humidity = humidity * 100;
+//        payload.temperature = temperature * 100;
+//        payload.pressure = pressure * 100;
+//        payload.battery = battery;
+//
+//        memcpy(&LMIC.frame[0], &payload, sizeof(native_payload_t));
+//        len = sizeof(native_payload_t);
+//    }
+//
+//    lmic_hal_enter_critical();
+//
+//    LMIC_setTxData2(1, LMIC.frame, len, confirmed);
+//
+//    lmic_hal_wakeup();
+//    lmic_hal_leave_critical();
+//
+//    xSemaphoreTake(send_semhr, portMAX_DELAY);
+//}
 
