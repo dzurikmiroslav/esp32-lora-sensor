@@ -3,6 +3,7 @@
 #include "nvs.h"
 
 #include "peripherals.h"
+#include "battery.h"
 #include "bme.h"
 #include "ble.h"
 #include "lora.h"
@@ -23,9 +24,11 @@ void environmental_init()
 
 void environmental_execute(bool lora, bool ble)
 {
+    uint8_t battery = battery_measure();
     bme_data_t bme_data = bme_read();
 
     if (ble) {
+        ble_set_battery(battery);
         ble_set_enviromental(bme_data.humidity, bme_data.temperature, bme_data.pressure);
     }
 
@@ -54,7 +57,7 @@ void environmental_execute(bool lora, bool ble)
             payload[len++] = pressure_val;
             payload[len++] = 4;
             payload[len++] = CAYENNE_LPP_DIGITAL_OUTPUT;
-            payload[len++] = 100;
+            payload[len++] = battery;
 
             lora_send(payload, len);
         } else {
@@ -63,7 +66,7 @@ void environmental_execute(bool lora, bool ble)
             payload.humidity = bme_data.humidity * 100;
             payload.temperature = bme_data.temperature * 100;
             payload.pressure = bme_data.pressure * 100;
-            payload.battery = 100;
+            payload.battery = battery;
 
             lora_send((uint8_t*) &payload, sizeof(native_payload_t));
         }

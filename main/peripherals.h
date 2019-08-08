@@ -20,16 +20,18 @@
 #define I2C_SDA         GPIO_NUM_12
 #define I2C_SCL         GPIO_NUM_14
 
-#define EXT_0           GPIO_NUM_26
-#define EXT_1           GPIO_NUM_25
-#define EXT_2           GPIO_NUM_33
-#define EXT_3           GPIO_NUM_35
-#define EXT_NSW         GPIO_NUM_27
+#define EXT_0           GPIO_NUM_32
+#define EXT_1           GPIO_NUM_33
+#define EXT_2           GPIO_NUM_25
+#define EXT_3           GPIO_NUM_26
+#define EXT_SW          GPIO_NUM_27
 
-#define EXT_0_ADC2_CHN  ADC2_CHANNEL_9
-#define EXT_1_ADC2_CHN  ADC2_CHANNEL_8
-#define EXT_2_ADC1_CHN  ADC1_CHANNEL_5
-#define EXT_3_ADC1_CHN  ADC1_CHANNEL_7
+#define EXT_0_ADC1_CHN  ADC1_CHANNEL_4
+#define EXT_1_ADC1_CHN  ADC1_CHANNEL_5
+#define EXT_2_ADC2_CHN  ADC2_CHANNEL_8
+#define EXT_3_ADC2_CHN  ADC2_CHANNEL_9
+
+#define VBAT_ADC1_CHN   ADC1_CHANNEL_7
 
 void spi_init();
 

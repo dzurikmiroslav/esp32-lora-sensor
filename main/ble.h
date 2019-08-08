@@ -19,6 +19,8 @@ void ble_init();
 
 void ble_deinit();
 
+void ble_set_battery(uint8_t battery);
+
 void ble_set_enviromental(float humidity, float temperature, float pressure);
 
 #endif /* BLE_H_ */

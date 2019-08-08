@@ -455,7 +455,7 @@ void ble_init()
 {
     ble_event_queue = xQueueCreate(5, sizeof(ble_event_t));
 
-    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
+   // ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT()
     ;
@@ -487,7 +487,21 @@ void ble_deinit()
 
     ESP_ERROR_CHECK(esp_bt_controller_deinit());
 
+//    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_IDLE));
+
     vQueueDelete(ble_event_queue);
+}
+
+void ble_set_battery(uint8_t battery) {
+    bat_lvl_val = battery;
+
+    esp_ble_gatts_set_attr_value(bat_serv_handle_table[BAT_SERV_IDX_CHAR_BAT_LVL], sizeof(uint8_t),
+                (uint8_t*) &bat_lvl_val);
+
+    if (ble_has_connection) {
+           esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, bat_serv_handle_table[BAT_SERV_IDX_CHAR_BAT_LVL],
+                   sizeof(uint8_t), (uint8_t*) &bat_lvl_val, false);
+    }
 }
 
 void ble_set_enviromental(float humidity, float temperature, float pressure)

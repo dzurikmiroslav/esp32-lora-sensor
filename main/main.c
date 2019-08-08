@@ -18,6 +18,7 @@
 #include "bme.h"
 #include "peripherals.h"
 #include "profile.h"
+#include "battery.h"
 
 #define BLE_CONNECTION_TIMEOUT  60000  //60sec
 #define LORA_JOIN_TIMEOUT       900000 //15min
@@ -229,6 +230,7 @@ void app_main()
     gpio_set_direction(LED_LORA, GPIO_MODE_OUTPUT);
     gpio_set_direction(LED_ERR, GPIO_MODE_OUTPUT);
 
+    battery_measure_init();
     i2c_init();
     bme_init();
 
