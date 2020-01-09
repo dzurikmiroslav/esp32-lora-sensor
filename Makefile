@@ -3,7 +3,6 @@
 # project subdirectory.
 #
 
-PROJECT_NAME := esp32-garden-sensor
+PROJECT_NAME := esp32-lora-sensor
 
 include $(IDF_PATH)/make/project.mk
-

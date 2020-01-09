@@ -12,7 +12,7 @@
 
 void spi_init()
 {
-    spi_bus_config_t spi_cfg = {0};
+    spi_bus_config_t spi_cfg = { 0 };
     spi_cfg.miso_io_num = SPI_MISO;
     spi_cfg.mosi_io_num = SPI_MOSI;
     spi_cfg.sclk_io_num = SPI_SCLK;
@@ -41,7 +41,9 @@ int8_t i2c_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t l
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, (dev_id << 1) | I2C_MASTER_WRITE, ACK_CHECK_EN);
     i2c_master_write_byte(cmd, reg_addr, ACK_CHECK_EN);
-    i2c_master_write(cmd, reg_data, len, ACK_CHECK_EN);
+    if (len > 0) {
+        i2c_master_write(cmd, reg_data, len, ACK_CHECK_EN);
+    }
     i2c_master_stop(cmd);
     esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
     i2c_cmd_link_delete(cmd);

@@ -4,7 +4,7 @@
 
 #include "peripherals.h"
 #include "battery.h"
-#include "bme.h"
+#include "sensor.h"
 #include "ble.h"
 #include "lora.h"
 #include "storage_key.h"
@@ -14,7 +14,6 @@ typedef struct
 {
     uint16_t humidity;
     int16_t temperature;
-    uint32_t pressure;
     uint8_t battery;
 }__attribute__((packed)) native_payload_t;
 
@@ -25,11 +24,12 @@ void environmental_init()
 void environmental_execute(bool lora, bool ble)
 {
     uint8_t battery = battery_measure();
-    bme_data_t bme_data = bme_read();
+    float humidity, temperature;
+    sensor_read(&humidity, &temperature);
 
     if (ble) {
         ble_set_battery(battery);
-        ble_set_enviromental(bme_data.humidity, bme_data.temperature, bme_data.pressure);
+        ble_set_enviromental(humidity, temperature);
     }
 
     if (lora) {
@@ -38,12 +38,12 @@ void environmental_execute(bool lora, bool ble)
 
         if (format == 1) {
             //cayenne lpp payload
-            uint8_t humidity_val = bme_data.humidity * 2;
-            int16_t temperature_val = bme_data.temperature * 10;
-            uint16_t pressure_val = bme_data.pressure / 100 * 10;
+            uint8_t humidity_val = humidity * 2;
+            int16_t temperature_val = temperature * 10;
+            int16_t battery_val = battery * 100;
 
             uint8_t len = 0;
-            uint8_t payload[14];
+            uint8_t payload[15];
             payload[len++] = 1;
             payload[len++] = CAYENNE_LPP_RELATIVE_HUMIDITY;
             payload[len++] = humidity_val;
@@ -52,20 +52,16 @@ void environmental_execute(bool lora, bool ble)
             payload[len++] = temperature_val >> 8;
             payload[len++] = temperature_val;
             payload[len++] = 3;
-            payload[len++] = CAYENNE_LPP_BAROMETRIC_PRESSURE;
-            payload[len++] = pressure_val >> 8;
-            payload[len++] = pressure_val;
-            payload[len++] = 4;
-            payload[len++] = CAYENNE_LPP_DIGITAL_OUTPUT;
-            payload[len++] = battery;
+            payload[len++] = CAYENNE_LPP_ANALOG_INPUT;
+            payload[len++] = battery_val >> 8;
+            payload[len++] = battery_val;
 
             lora_send(payload, len);
         } else {
             //native payload
             native_payload_t payload;
-            payload.humidity = bme_data.humidity * 100;
-            payload.temperature = bme_data.temperature * 100;
-            payload.pressure = bme_data.pressure * 100;
+            payload.humidity = humidity * 100;
+            payload.temperature = temperature * 100;
             payload.battery = battery;
 
             lora_send((uint8_t*) &payload, sizeof(native_payload_t));

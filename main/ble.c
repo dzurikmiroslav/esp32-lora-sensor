@@ -119,10 +119,6 @@ enum
     ENV_SENS_IDX_CHAR_VAL_TEMP,
     ENV_SENS_IDX_CHAR_CFG_TEMP,
 
-    ENV_SENS_IDX_CHAR_PRESS,
-    ENV_SENS_IDX_CHAR_VAL_PRESS,
-    ENV_SENS_IDX_CHAR_CFG_PRESS,
-
     ENV_SENS_IDX_NB
 };
 
@@ -149,7 +145,6 @@ static const uint16_t GATTS_CHAR_UUID_PAYL_FMT      = 0xC906;
 static const uint16_t GATTS_CHAR_UUID_CONFM         = 0xC907;
 static const uint16_t GATTS_CHAR_UUID_HUM           = 0x2A6F;
 static const uint16_t GATTS_CHAR_UUID_TEMP          = 0x2A6E;
-static const uint16_t GATTS_CHAR_UUID_PRESS         = 0x2A6D;
 static const uint16_t GATTS_CHAR_UUID_BAT_LVL       = 0x2A19;
 
 static const uint16_t primary_service_uuid = ESP_GATT_UUID_PRI_SERVICE;
@@ -181,9 +176,6 @@ static uint8_t hum_ccc[2] = {0x00, 0x00};
 
 static int16_t temp_val = 0;
 static uint8_t temp_ccc[2] = {0x00, 0x00};
-
-static uint32_t press_val = 0;
-static uint8_t press_ccc[2] = {0x00, 0x00};
 
 static const esp_gatts_attr_db_t gatt_lora_db[LORA_IDX_NB] = {
     [LORA_IDX_SVC] =
@@ -257,13 +249,6 @@ static const esp_gatts_attr_db_t gatt_env_sens_db[ENV_SENS_IDX_NB] = {
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_TEMP, ESP_GATT_PERM_READ, sizeof(int16_t), sizeof(int16_t), (uint8_t *)&temp_val}},
     [ENV_SENS_IDX_CHAR_CFG_TEMP] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)temp_ccc}},
-
-    [ENV_SENS_IDX_CHAR_PRESS] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_notify}},
-    [ENV_SENS_IDX_CHAR_VAL_PRESS] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_PRESS, ESP_GATT_PERM_READ, sizeof(uint32_t), sizeof(uint32_t), (uint8_t *)&press_val}},
-    [ENV_SENS_IDX_CHAR_CFG_PRESS] =
-        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)press_ccc}},
 };
 
 static const esp_gatts_attr_db_t gatt_bat_serv_db[BAT_SERV_IDX_NB] = {
@@ -504,18 +489,15 @@ void ble_set_battery(uint8_t battery) {
     }
 }
 
-void ble_set_enviromental(float humidity, float temperature, float pressure)
+void ble_set_enviromental(float humidity, float temperature)
 {
     hum_val = humidity * 100;
     temp_val = temperature * 100;
-    press_val = pressure * 10;
 
     esp_ble_gatts_set_attr_value(env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_HUM], sizeof(uint16_t),
             (uint8_t*) &hum_val);
     esp_ble_gatts_set_attr_value(env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_TEMP], sizeof(int16_t),
             (uint8_t*) &temp_val);
-    esp_ble_gatts_set_attr_value(env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_PRESS], sizeof(uint32_t),
-            (uint8_t*) &press_val);
     esp_ble_gatts_set_attr_value(bat_serv_handle_table[BAT_SERV_IDX_CHAR_VAL_BAT_LVL], sizeof(uint8_t),
             (uint8_t*) &bat_lvl_val);
 
@@ -524,7 +506,5 @@ void ble_set_enviromental(float humidity, float temperature, float pressure)
                 sizeof(uint16_t), (uint8_t*) &hum_val, false);
         esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_TEMP],
                 sizeof(int16_t), (uint8_t*) &temp_val, false);
-        esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, env_sens_handle_table[ENV_SENS_IDX_CHAR_VAL_PRESS],
-                sizeof(uint32_t), (uint8_t*) &press_val, false);
     }
 }

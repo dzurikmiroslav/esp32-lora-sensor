@@ -15,7 +15,7 @@
 #include "lora.h"
 #include "storage_key.h"
 #include "ble.h"
-#include "bme.h"
+#include "sensor.h"
 #include "peripherals.h"
 #include "profile.h"
 #include "battery.h"
@@ -231,8 +231,10 @@ void app_main()
     gpio_set_direction(LED_ERR, GPIO_MODE_OUTPUT);
 
     battery_measure_init();
+#if (SENSOR_TYPE == SENSOR_DHT10)
     i2c_init();
-    bme_init();
+#endif
+    sensor_init();
 
     spi_init(SPI_MISO, SPI_MOSI, SPI_SCLK);
     lora_init(HSPI_HOST, SPI_RFM_NSS, LORA_UNUSED_PIN, SPI_RFM_RESET, SPI_RFM_DIO0, SPI_RFM_DIO1);
