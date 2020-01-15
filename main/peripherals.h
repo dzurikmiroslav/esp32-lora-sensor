@@ -22,6 +22,20 @@
 
 #define VBAT_ADC1_CHN   ADC1_CHANNEL_0
 
+typedef enum
+{
+    LED_ID_BLE,
+    LED_ID_LORA,
+    LED_ID_ERR,
+} led_id_t;
+
+typedef enum
+{
+    LED_STATE_ON,
+    LED_STATE_OFF,
+    LED_STATE_FLASH
+} led_state_t;
+
 void spi_init();
 
 void i2c_init();
@@ -29,5 +43,9 @@ void i2c_init();
 int8_t i2c_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len);
 
 int8_t i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len);
+
+void led_init();
+
+void led_set_state(led_id_t led_id, led_state_t state);
 
 #endif /* PERIPHERALS_H_ */

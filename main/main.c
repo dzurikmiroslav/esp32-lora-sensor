@@ -20,8 +20,9 @@
 #include "profile.h"
 #include "battery.h"
 
-#define BLE_CONNECTION_TIMEOUT  60000  //60sec
-#define LORA_JOIN_TIMEOUT       900000 //15min
+#define BLE_CONNECTION_TIMEOUT  60000  /* 60sec */
+#define LORA_JOIN_TIMEOUT       900000 /* 15min */
+#define LIRA_ERROR_TIMEOUT      30000  /* 30sec */
 
 static const char *TAG = "main";
 
@@ -46,17 +47,6 @@ static SemaphoreHandle_t send_mutex;
 nvs_handle storage;
 
 static profile_callbacks_t profile_cb;
-
-static void blink_task_func(void *param)
-{
-    gpio_num_t led = (int) param;
-    while (true) {
-        gpio_set_level(led, 0);
-        vTaskDelay(500 / portTICK_PERIOD_MS);
-        gpio_set_level(led, 1);
-        vTaskDelay(500 / portTICK_PERIOD_MS);
-    }
-}
 
 static uint64_t get_timer_timeout()
 {
@@ -84,6 +74,8 @@ static void join_task_func(void *param)
     memset(&send_time, 0, sizeof(struct timeval));
     dev_addr = 0;
 
+    led_set_state(LED_ID_ERR, LED_STATE_OFF);
+
     size_t app_eui_len = 8;
     size_t dev_eui_len = 8;
     size_t dev_key_len = 16;
@@ -93,18 +85,25 @@ static void join_task_func(void *param)
         ESP_LOGI(TAG, "Gonna to login");
         xSemaphoreTake(join_mutex, portMAX_DELAY);
         lora_start_joining();
+        led_set_state(LED_ID_LORA, LED_STATE_FLASH);
         xSemaphoreGive(join_mutex);
 
         bool join_status;
         if (xQueueReceive(lora_join_queue, &join_status, LORA_JOIN_TIMEOUT / portTICK_PERIOD_MS) && join_status) {
+            led_set_state(LED_ID_LORA, LED_STATE_OFF);
             ESP_LOGI(TAG, "Login successful");
             lora_get_session(&dev_addr, nwk_key, art_key);
             xSemaphoreGive(send_sem);
         } else {
+            led_set_state(LED_ID_LORA, LED_STATE_OFF);
+            led_set_state(LED_ID_ERR, LED_STATE_ON);
             ESP_LOGE(TAG, "Login not successful");
+            vTaskDelay(30000 / portTICK_PERIOD_MS);
         }
     } else {
-        ESP_LOGW(TAG, "Missing login credentials");
+       led_set_state(LED_ID_ERR, LED_STATE_FLASH);
+       ESP_LOGW(TAG, "Missing login credentials");
+       vTaskDelay(30000 / portTICK_PERIOD_MS);
     }
 
     join_task = 0;
@@ -117,11 +116,10 @@ static void ble_task_func(void *param)
     ble_event_t event;
     bool connection = false;
     bool receved;
-    TaskHandle_t blink_task;
 
     ble_init();
 
-    xTaskCreate(blink_task_func, "ble_blink_task", 1 * 1024, (void*) (int) LED_BLE, 5, &blink_task);
+    led_set_state(LED_ID_BLE, LED_STATE_FLASH);
 
     profile_cb.execute(false, true);
 
@@ -130,12 +128,11 @@ static void ble_task_func(void *param)
         switch (event) {
             case BLE_EVENT_CONNECT:
                 connection = true;
-                vTaskSuspend(blink_task);
-                gpio_set_level(LED_BLE, 1);
+                led_set_state(LED_ID_BLE, LED_STATE_ON);
                 break;
             case BLE_EVENT_DISCONNECT:
                 connection = false;
-                vTaskResume(blink_task);
+                led_set_state(LED_ID_BLE, LED_STATE_FLASH);
                 break;
             case BLE_EVENT_PERIOD_UPDATE:
                 if (dev_addr) {
@@ -164,11 +161,10 @@ static void ble_task_func(void *param)
                 break;
         }
     }
-    vTaskDelete(blink_task);
 
     ble_deinit();
     xSemaphoreGive(ble_task_done_sem);
-    gpio_set_level(LED_BLE, 0);
+    led_set_state(LED_ID_BLE, LED_STATE_OFF);
     vTaskDelete(NULL);
 }
 
@@ -186,13 +182,12 @@ static void send_timer_callback(void *arg)
 
 static void measure_and_send(bool has_ble)
 {
-    TaskHandle_t blink_task;
-    xTaskCreate(blink_task_func, "lora_blink_task", 1 * 1024, (void*) (int) LED_LORA, 5, &blink_task);
+    led_set_state(LED_ID_LORA, LED_STATE_FLASH);
 
     gettimeofday(&send_time, NULL);
     profile_cb.execute(dev_addr, has_ble);
 
-    vTaskDelete(blink_task);
+    led_set_state(LED_ID_LORA, LED_STATE_OFF);
 }
 
 static void send_task_func(void *param)
@@ -226,10 +221,7 @@ void app_main()
     profile_cb = profile_get_callbacks(profile);
     ESP_LOGI(TAG, "Profile %u", profile);
 
-    gpio_set_direction(LED_BLE, GPIO_MODE_OUTPUT);
-    gpio_set_direction(LED_LORA, GPIO_MODE_OUTPUT);
-    gpio_set_direction(LED_ERR, GPIO_MODE_OUTPUT);
-
+    led_init();
     battery_measure_init();
 #if (SENSOR_TYPE == SENSOR_DHT10)
     i2c_init();
