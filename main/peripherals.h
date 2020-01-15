@@ -17,7 +17,7 @@
 #define LED_LORA        GPIO_NUM_15
 #define LED_ERR         GPIO_NUM_13
 
-#define I2C_SDA         GPIO_NUM_27 /* TODO GPIO_NUM_21 */
+#define I2C_SDA         GPIO_NUM_21
 #define I2C_SCL         GPIO_NUM_22
 
 #define VBAT_ADC1_CHN   ADC1_CHANNEL_0

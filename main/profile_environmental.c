@@ -77,7 +77,7 @@ void environmental_execute(bool lora, bool ble)
             length = sizeof(native_payload_t);
         }
 
-        lora_send((uint8_t*) &payload, length);
+        lora_send((uint8_t*) payload, length);
     }
 }
 
