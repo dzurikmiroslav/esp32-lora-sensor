@@ -1,0 +1,13 @@
+menu "LoRa Sensor Configuration"
+	
+	choice SENSOR_TYPE
+        prompt "Internal sensor type"      
+        default SENSOR_TYPE_DHT10
+
+        config SENSOR_TYPE_DHT10
+            bool "DHT10"
+        config SENSOR_TYPE_DHT22
+            bool "DHT22"
+    endchoice
+
+endmenu

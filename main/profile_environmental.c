@@ -3,6 +3,7 @@
 #include "nvs.h"
 #include "esp_log.h"
 
+#include "profile_environmental.h"
 #include "peripherals.h"
 #include "battery.h"
 #include "sensor.h"
@@ -11,7 +12,6 @@
 #include "storage_key.h"
 #include "cayenne.h"
 
-#include "profile_environmental.h"
 
 typedef struct
 {
@@ -28,7 +28,10 @@ void environmental_init()
 
 void environmental_execute(bool lora, bool ble)
 {
-    uint8_t battery = battery_measure();
+    uint8_t battery;
+    float battery_voltage;
+    battery_measure(&battery, &battery_voltage);
+
     float humidity, temperature;
     sensor_read(&humidity, &temperature);
 
@@ -48,7 +51,7 @@ void environmental_execute(bool lora, bool ble)
             //cayenne lpp payload
             uint8_t humidity_val = humidity * 2;
             int16_t temperature_val = temperature * 10;
-            int16_t battery_val = battery * 100;
+            int16_t battery_val = battery_voltage * 100;
 
             uint8_t len = 0;
             uint8_t lpp[15];

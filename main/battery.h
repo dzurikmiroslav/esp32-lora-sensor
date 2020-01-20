@@ -5,9 +5,6 @@
 
 void battery_measure_init();
 
-/**
- * Return battery value between [0-100]
- */
-uint8_t battery_measure();
+void battery_measure(uint8_t *battery, float *battery_voltage);
 
 #endif /* BATTERY_H_ */

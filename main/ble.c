@@ -1,5 +1,3 @@
-#include "ble.h"
-
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "esp_log.h"
@@ -11,6 +9,7 @@
 #include "esp_gatt_common_api.h"
 #include "nvs.h"
 
+#include "ble.h"
 #include "storage_key.h"
 
 static const char *TAG = "ble";

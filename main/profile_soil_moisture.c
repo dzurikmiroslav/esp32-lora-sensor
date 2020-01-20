@@ -1,5 +1,3 @@
-#include "profile_soil_moisture.h"
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs.h"
@@ -7,6 +5,7 @@
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 
+#include "profile_soil_moisture.h"
 #include "peripherals.h"
 #include "battery.h"
 #include "sensor.h"
@@ -46,7 +45,10 @@ void soil_mousture_init()
 
 void soil_mousture_execute(bool lora, bool ble)
 {
-    uint8_t battery = battery_measure();
+    uint8_t battery;
+    float battery_voltage;
+    battery_measure(&battery, &battery_voltage);
+
     float humidity, temperature;
     sensor_read(&humidity, &temperature);
 
@@ -81,7 +83,7 @@ void soil_mousture_execute(bool lora, bool ble)
             uint8_t humidity_val = humidity * 2;
             int16_t temperature_val = temperature * 10;
             int16_t soil_moisture = voltage * 100;
-            int16_t battery_val = battery * 100;
+            int16_t battery_val = battery_voltage * 100;
 
             uint8_t len = 0;
             uint8_t lpp[19];

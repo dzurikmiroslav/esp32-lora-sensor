@@ -1,5 +1,3 @@
-#include "lmic_hal.h"
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "esp_log.h"
@@ -8,6 +6,7 @@
 #include "driver/timer.h"
 #include "lmic.h"
 
+#include "lmic_hal.h"
 #include "lora.h"
 
 static const char *TAG = "lmic_hal";
@@ -74,12 +73,12 @@ void hal_init_ex(const void *pContext)
     gpio_pad_select_gpio(lmic_pins.dio0);
     gpio_set_direction((gpio_num_t) lmic_pins.dio0, GPIO_MODE_INPUT);
     gpio_set_intr_type((gpio_num_t) lmic_pins.dio0, GPIO_INTR_POSEDGE);
-    gpio_isr_handler_add((gpio_num_t) lmic_pins.dio0, dio_isr_handler, (void *) (int) WAKE_DIO0);
+    gpio_isr_handler_add((gpio_num_t) lmic_pins.dio0, dio_isr_handler, (void*) (int) WAKE_DIO0);
 
     gpio_pad_select_gpio((gpio_num_t) lmic_pins.dio1);
     gpio_set_direction((gpio_num_t) lmic_pins.dio1, GPIO_MODE_INPUT);
     gpio_set_intr_type((gpio_num_t) lmic_pins.dio1, GPIO_INTR_POSEDGE);
-    gpio_isr_handler_add((gpio_num_t) lmic_pins.dio1, dio_isr_handler, (void *) (int) WAKE_DIO1);
+    gpio_isr_handler_add((gpio_num_t) lmic_pins.dio1, dio_isr_handler, (void*) (int) WAKE_DIO1);
 
     /* @formatter:off */
     spi_device_interface_config_t spi_dev_cfg = {
@@ -217,10 +216,12 @@ static void disarm_timer_alarm()
     next_timer_alarm = 0x200000000;
 }
 
-void hal_waitUntil(u4_t time)
+u4_t hal_waitUntil(u4_t time)
 {
     set_next_timer_alarm(time);
     hal_sleep();
+
+    return 0;
 }
 
 u1_t hal_checkTimer(u4_t time)
@@ -293,4 +294,9 @@ void lmic_hal_wakeup()
 {
     wake_t wake = WAKE_USER;
     xQueueSend(wake_queue, &wake, 0);
+}
+
+uint8_t hal_getTxPowerPolicy(u1_t inputPolicy, s1_t requestedPower, u4_t frequency)
+{
+    return LMICHAL_radio_tx_power_policy_paboost;
 }

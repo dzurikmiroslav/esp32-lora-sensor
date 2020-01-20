@@ -97,7 +97,7 @@ void led_init()
             .timer_num  = LEDC_TIMER_0
     };
     /* @formatter:on */
-    ledc_timer_config(&ledc_timer);
+   ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
 
     /* @formatter:off */
     ledc_channel_config_t ledc_channel = {
@@ -109,17 +109,24 @@ void led_init()
             .duty       = 0
     };
     /* @formatter:on */
-    ledc_channel_config(&ledc_channel);
+    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
 
     ledc_channel.gpio_num = LED_LORA;
     ledc_channel.channel = LEDC_CHANNEL_1;
-    ledc_channel_config(&ledc_channel);
+    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
 
     ledc_channel.gpio_num = LED_ERR;
     ledc_channel.channel = LEDC_CHANNEL_2;
-    ledc_channel_config(&ledc_channel);
+    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
 
-    ledc_fade_func_install(0);
+    //ledc_fade_func_install(0);
+}
+
+void led_deinit()
+{
+    ledc_stop(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0, 0);
+    ledc_stop(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_1, 0);
+    ledc_stop(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_2, 0);
 }
 
 void led_set_state(led_id_t led_id, led_state_t state)

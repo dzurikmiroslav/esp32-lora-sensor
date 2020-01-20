@@ -50,7 +50,7 @@ static profile_callbacks_t profile_cb;
 
 static uint64_t get_timer_timeout()
 {
-    uint16_t period = 60; //default 60s period
+    uint16_t period = 60; /* default 60s period */
     nvs_get_u16(storage, STORAGE_KEY_PERIOD, &period);
 
     uint64_t timeout = period * 1000000;
@@ -248,12 +248,12 @@ void app_main()
         init_time = esp_timer_get_time();
         measure_and_send(false);
     } else {
-        // @formatter:off
+        /* @formatter:off */
         esp_timer_create_args_t timer_args = {
                 .callback = &send_timer_callback,
                 .name = "send_timer"
         };
-        // @formatter:on
+        /* @formatter:on */
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &send_timer));
 
         xTaskCreate(send_task_func, "send_task", 4 * 1024, NULL, 10, &send_task);
@@ -287,11 +287,13 @@ void app_main()
 
     lora_get_counters(&seqno_up, &seqno_dw);
     lora_deinit();
+    led_deinit();
 
     profile_cb.deinit();
 
     esp_sleep_enable_ext0_wakeup(BUTTON_BLE, 0);
-    if (dev_addr) { //only if has session
+    if (dev_addr) {
+        /* only if has session */
         esp_sleep_enable_timer_wakeup(get_timer_timeout() - init_time);
     }
     ESP_LOGI(TAG, "Entering to deep sleep (run time %d)...", xTaskGetTickCount() * portTICK_PERIOD_MS);

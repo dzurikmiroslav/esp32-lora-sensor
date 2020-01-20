@@ -1,5 +1,3 @@
-#include "lora.h"
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -9,6 +7,7 @@
 #include "lmic.h"
 #include "nvs.h"
 
+#include "lora.h"
 #include "lmic_hal.h"
 #include "storage_key.h"
 

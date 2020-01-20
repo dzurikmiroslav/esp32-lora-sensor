@@ -1,10 +1,9 @@
-#include "battery.h"
-
 #include <math.h>
 #include "esp_log.h"
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 
+#include "battery.h"
 #include "peripherals.h"
 
 #define ADC_ATTEN   ADC_ATTEN_DB_11
@@ -24,7 +23,7 @@ void battery_measure_init()
     esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN, ADC_WIDTH, 1100, &adc_char);
 }
 
-uint8_t battery_measure()
+void battery_measure(uint8_t *battery, float *battery_voltage)
 {
     int adc_reading = adc1_get_raw(VBAT_ADC1_CHN);
     uint32_t vcc = 2 * esp_adc_cal_raw_to_voltage(adc_reading, &adc_char);
@@ -33,9 +32,9 @@ uint8_t battery_measure()
     if (v < 0) {
         v = 0;
     }
-    uint8_t value = v / (float) (MAX_VCC - MIN_VCC) * 100;
 
-    ESP_LOGI(TAG, "Measure %d%% (%dmV)", value, vcc);
+    *battery_voltage = vcc / 1000.0f;
+    *battery = v / (float) (MAX_VCC - MIN_VCC) * 100;
 
-    return value;
+    ESP_LOGI(TAG, "Measure %d%% (%dmV)", *battery, vcc);
 }

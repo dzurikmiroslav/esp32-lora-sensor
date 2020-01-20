@@ -1,11 +1,11 @@
-#include "sensor.h"
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_err.h"
+#include "sdkconfig.h"
 
+#include "sensor.h"
 #include "peripherals.h"
 
 #define ONE_WIRE                I2C_SDA
@@ -19,7 +19,7 @@ static const char *TAG = "sensor";
 
 void sensor_init()
 {
-#if (SENSOR_TYPE == SENSOR_DHT10)
+#ifdef CONFIG_SENSOR_TYPE_DHT10
     ESP_ERROR_CHECK(i2c_write(DHT10_I2C_ADDR, DHT10_RESET_REG_ADDR, NULL, 0));
 
     uint8_t init_param[] = { 0x08, 0x00 };
@@ -28,12 +28,13 @@ void sensor_init()
     uint8_t status = 0;
     ESP_ERROR_CHECK(i2c_read(DHT10_I2C_ADDR, 1, &status, sizeof(uint8_t)));
     ESP_ERROR_CHECK((status & 0x8) == 0x8 ? ESP_OK : ESP_FAIL);
-#else
+#endif /* CONFIG_SENSOR_TYPE_DHT10 */
+#ifdef CONFIG_SENSOR_TYPE_DHT22
     gpio_pad_select_gpio(ONE_WIRE);
-#endif
+#endif /* CONFIG_SENSOR_TYPE_DHT22 */
 }
 
-#if (SENSOR_TYPE != SENSOR_DHT10)
+#ifdef CONFIG_SENSOR_TYPE_DHT22
 static esp_err_t dht_await_pin_state(gpio_num_t pin, uint32_t timeout, int expected_pin_state, uint32_t *duration)
 {
     gpio_set_direction(pin, GPIO_MODE_INPUT);
@@ -52,21 +53,17 @@ static esp_err_t dht_await_pin_state(gpio_num_t pin, uint32_t timeout, int expec
 static inline int16_t dht_convert_data(uint8_t msb, uint8_t lsb)
 {
     int16_t data;
-#if (SENSOR_TYPE == SENSOR_DHT11)
-    data = msb * 10;
-#else
     data = msb & 0x7F;
     data <<= 8;
     data |= lsb;
-    if (msb & BIT(7)) data = -data;       // convert it to negative
-#endif
+    if (msb & BIT(7)) data = -data;
     return data;
 }
-#endif
+#endif /* CONFIG_SENSOR_TYPE_DHT22 */
 
 void sensor_read(float *humidity, float *temperature)
 {
-#if (SENSOR_TYPE == SENSOR_DHT10)
+#ifdef CONFIG_SENSOR_TYPE_DHT10
     uint8_t measure_param[] = { 0x33, 0x00 };
     ESP_ERROR_CHECK(i2c_write(DHT10_I2C_ADDR, DHT10_MEASURE_REG_ADDR, measure_param, sizeof(measure_param)));
 
@@ -79,7 +76,8 @@ void sensor_read(float *humidity, float *temperature)
 
     *humidity = ((((bytes[1] << 8) | bytes[2]) << 4) | bytes[3] >> 4) / 1048576.0f * 100.0f;
     *temperature = (((((bytes[3] & 0b00001111) << 8) | bytes[4]) << 8) | bytes[5]) / 1048576.0f * 200.0f - 50.0f;
-#else
+#endif /* CONFIG_SENSOR_TYPE_DHT10 */
+#ifdef CONFIG_SENSOR_TYPE_DHT22
     uint32_t low_duration;
     uint32_t high_duration;
 
@@ -114,7 +112,8 @@ void sensor_read(float *humidity, float *temperature)
 
     *humidity = dht_convert_data(data[0], data[1]) / 10.0f;
     *temperature = dht_convert_data(data[2], data[3]) / 10.0f;
-#endif
+#endif /* CONFIG_SENSOR_TYPE_DHT22 */
+
     ESP_LOGI(TAG, "Temperature %.2f °C", *temperature);
     ESP_LOGI(TAG, "Humidity %.2f %%", *humidity);
 }
