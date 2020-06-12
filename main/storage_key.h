@@ -3,13 +3,15 @@
 
 #define STORAGE_NAME "lora"
 
-#define STORAGE_KEY_APP_EUI     "app_eui"
-#define STORAGE_KEY_DEV_EUI     "dev_eui"
-#define STORAGE_KEY_DEV_KEY     "dev_kei"
-#define STORAGE_KEY_PERIOD      "period"
-#define STORAGE_KEY_PAYL_FMT    "payl_fmt"
-#define STORAGE_KEY_CONFM       "confm"
-#define STORAGE_KEY_PROFILE     "profile"
+#define STORAGE_KEY_LORA_JOIN_EUI   "lora_join_eui"
+#define STORAGE_KEY_LORA_DEV_EUI    "lora_dev_eui"
+#define STORAGE_KEY_LORA_APP_KEY    "lora_app_key"
+#define STORAGE_KEY_LORA_NWK_KEY    "lora_nwk_key"
+#define STORAGE_KEY_LORA_DEV_NONCE  "lora_dev_nonce"
+#define STORAGE_KEY_LORA_JOIN_NONCE "lora_join_nonce"
+#define STORAGE_KEY_PERIOD          "period"
+#define STORAGE_KEY_PAYL_FMT        "payl_fmt"
+#define STORAGE_KEY_CONFM           "confm"
 
 extern nvs_handle storage;
 

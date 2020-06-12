@@ -12,7 +12,6 @@
 #include "storage_key.h"
 #include "cayenne.h"
 
-
 typedef struct
 {
     uint16_t humidity;
@@ -54,7 +53,7 @@ void environmental_execute(bool lora, bool ble)
             int16_t battery_val = battery_voltage * 100;
 
             uint8_t len = 0;
-            uint8_t lpp[15];
+            uint8_t lpp[11];
             lpp[len++] = 1;
             lpp[len++] = CAYENNE_LPP_RELATIVE_HUMIDITY;
             lpp[len++] = humidity_val;
@@ -66,6 +65,8 @@ void environmental_execute(bool lora, bool ble)
             lpp[len++] = CAYENNE_LPP_ANALOG_INPUT;
             lpp[len++] = battery_val >> 8;
             lpp[len++] = battery_val;
+
+            ESP_LOG_BUFFER_HEX_LEVEL(TAG, lpp, len, ESP_LOG_INFO);
 
             payload = lpp;
             length = len;
@@ -80,7 +81,7 @@ void environmental_execute(bool lora, bool ble)
             length = sizeof(native_payload_t);
         }
 
-        lora_send((uint8_t*) payload, length);
+        lora_send(payload, length);
     }
 }
 

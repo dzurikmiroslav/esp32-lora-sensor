@@ -4,6 +4,7 @@
 #include <sys/time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_system.h"
 #include "esp_sleep.h"
 #include "esp_log.h"
@@ -17,7 +18,8 @@
 #include "ble.h"
 #include "sensor.h"
 #include "peripherals.h"
-#include "profile.h"
+#include "profile_environmental.h"
+#include "profile_soil_moisture.h"
 #include "battery.h"
 
 #define BLE_CONNECTION_TIMEOUT  60000  /* 60sec */
@@ -26,11 +28,6 @@
 
 static const char *TAG = "main";
 
-static RTC_DATA_ATTR uint32_t dev_addr = 0;
-static RTC_DATA_ATTR uint8_t nwk_key[16];
-static RTC_DATA_ATTR uint8_t art_key[16];
-static RTC_DATA_ATTR uint32_t seqno_up;
-static RTC_DATA_ATTR uint32_t seqno_dw;
 static RTC_DATA_ATTR struct timeval send_time;
 
 static esp_timer_handle_t send_timer = NULL;
@@ -46,7 +43,9 @@ static SemaphoreHandle_t send_mutex;
 
 nvs_handle storage;
 
-static profile_callbacks_t profile_cb;
+void (*profile_init)();
+void (*profile_execute)(bool lora, bool ble);
+void (*profile_deinit)();
 
 static uint64_t get_timer_timeout()
 {
@@ -72,38 +71,29 @@ static void join_task_func(void *param)
 {
     esp_timer_stop(send_timer);
     memset(&send_time, 0, sizeof(struct timeval));
-    dev_addr = 0;
 
-    led_set_state(LED_ID_ERR, LED_STATE_OFF);
-
-    size_t app_eui_len = 8;
-    size_t dev_eui_len = 8;
-    size_t dev_key_len = 16;
-    if (nvs_get_blob(storage, STORAGE_KEY_APP_EUI, NULL, &app_eui_len) == ESP_OK
-            && nvs_get_blob(storage, STORAGE_KEY_DEV_EUI, NULL, &dev_eui_len) == ESP_OK
-            && nvs_get_blob(storage, STORAGE_KEY_DEV_KEY, NULL, &dev_key_len) == ESP_OK) {
+    size_t join_eui_len = 8 * sizeof(uint8_t);
+    size_t dev_eui_len = 8 * sizeof(uint8_t);
+    size_t nwk_key_len = 16 * sizeof(uint8_t);
+    if (nvs_get_blob(storage, STORAGE_KEY_LORA_JOIN_EUI, NULL, &join_eui_len) == ESP_OK
+            && nvs_get_blob(storage, STORAGE_KEY_LORA_DEV_EUI, NULL, &dev_eui_len) == ESP_OK
+            && nvs_get_blob(storage, STORAGE_KEY_LORA_NWK_KEY, NULL, &nwk_key_len) == ESP_OK) {
         ESP_LOGI(TAG, "Gonna to login");
-        xSemaphoreTake(join_mutex, portMAX_DELAY);
-        lora_start_joining();
-        led_set_state(LED_ID_LORA, LED_STATE_FLASH);
-        xSemaphoreGive(join_mutex);
 
-        bool join_status;
-        if (xQueueReceive(lora_join_queue, &join_status, LORA_JOIN_TIMEOUT / portTICK_PERIOD_MS) && join_status) {
+        led_set_state(LED_ID_LORA, LED_STATE_DUTY_50);
+        if (lora_join()) {
             led_set_state(LED_ID_LORA, LED_STATE_OFF);
             ESP_LOGI(TAG, "Login successful");
-            lora_get_session(&dev_addr, nwk_key, art_key);
             xSemaphoreGive(send_sem);
         } else {
-            led_set_state(LED_ID_LORA, LED_STATE_OFF);
-            led_set_state(LED_ID_ERR, LED_STATE_ON);
+            led_set_state(LED_ID_LORA, LED_STATE_DUTY_90);
             ESP_LOGE(TAG, "Login not successful");
-            vTaskDelay(30000 / portTICK_PERIOD_MS);
+            vTaskDelay(10000 / portTICK_PERIOD_MS);
         }
     } else {
-       led_set_state(LED_ID_ERR, LED_STATE_FLASH);
-       ESP_LOGW(TAG, "Missing login credentials");
-       vTaskDelay(30000 / portTICK_PERIOD_MS);
+        led_set_state(LED_ID_LORA, LED_STATE_DUTY_90);
+        ESP_LOGW(TAG, "Missing login credentials");
+        vTaskDelay(5000 / portTICK_PERIOD_MS);
     }
 
     join_task = 0;
@@ -119,9 +109,9 @@ static void ble_task_func(void *param)
 
     ble_init();
 
-    led_set_state(LED_ID_BLE, LED_STATE_FLASH);
+    led_set_state(LED_ID_BLE, LED_STATE_DUTY_50);
 
-    profile_cb.execute(false, true);
+    profile_execute(false, true);
 
     while ((receved = xQueueReceive(ble_event_queue, &event, BLE_CONNECTION_TIMEOUT / portTICK_PERIOD_MS)) || connection) {
         if (!receved) continue;
@@ -132,10 +122,10 @@ static void ble_task_func(void *param)
                 break;
             case BLE_EVENT_DISCONNECT:
                 connection = false;
-                led_set_state(LED_ID_BLE, LED_STATE_FLASH);
+                led_set_state(LED_ID_BLE, LED_STATE_DUTY_50);
                 break;
             case BLE_EVENT_PERIOD_UPDATE:
-                if (dev_addr) {
+                if (lora_is_joined()) {
                     esp_timer_stop(send_timer);
                     xSemaphoreGive(send_sem);
                 }
@@ -147,15 +137,9 @@ static void ble_task_func(void *param)
                 }
                 xSemaphoreGive(join_mutex);
                 xSemaphoreTake(join_task_done_sem, 0);
+//                nvs_erase_key(storage, STORAGE_KEY_LORA_DEV_NONCE);
+//                nvs_erase_key(storage, STORAGE_KEY_LORA_JOIN_NONCE);
                 xTaskCreate(join_task_func, "join_task", 4 * 1024, NULL, 10, &join_task);
-                break;
-            case BLE_EVENT_PROFILE_UPDATE:
-                profile_cb.deinit();
-                uint8_t profile = 0;
-                nvs_get_u8(storage, STORAGE_KEY_PROFILE, &profile);
-                ESP_LOGI(TAG, "Changing to profile %u", profile);
-                profile_cb = profile_get_callbacks(profile);
-                profile_cb.init();
                 break;
             default:
                 break;
@@ -182,10 +166,10 @@ static void send_timer_callback(void *arg)
 
 static void measure_and_send(bool has_ble)
 {
-    led_set_state(LED_ID_LORA, LED_STATE_FLASH);
+    led_set_state(LED_ID_LORA, LED_STATE_DUTY_5);
 
     gettimeofday(&send_time, NULL);
-    profile_cb.execute(dev_addr, has_ble);
+    profile_execute(lora_is_joined(), has_ble);
 
     led_set_state(LED_ID_LORA, LED_STATE_OFF);
 }
@@ -216,10 +200,16 @@ void app_main()
 
     ESP_ERROR_CHECK(gpio_install_isr_service(ESP_INTR_FLAG_IRAM));
 
-    uint8_t profile = 0;
-    nvs_get_u8(storage, STORAGE_KEY_PROFILE, &profile);
-    profile_cb = profile_get_callbacks(profile);
-    ESP_LOGI(TAG, "Profile %u", profile);
+#ifdef SENSOR_PROFILE_DEFALUT
+    profile_init = &environmental_mousture_init;
+    profile_execute = &environmental_execute;
+    profile_deinit = &environmental_deinit;
+#endif /* SENSOR_PROFILE_DEFALUT */
+#ifdef SENSOR_PROFILE_SOIL_MOSTURE
+    profile_init = &soil_mousture_init$;
+    profile_execute = &soil_mousture_execute;
+    profile_deinit = &soil_mousture_deinit;
+#endif /* SENSOR_PROFILE_SOIL_MOSTURE */
 
     led_init();
     battery_measure_init();
@@ -227,11 +217,10 @@ void app_main()
     i2c_init();
 #endif
     sensor_init();
+    spi_init();
+    lora_init();
 
-    spi_init(SPI_MISO, SPI_MOSI, SPI_SCLK);
-    lora_init(HSPI_HOST, SPI_RFM_NSS, LORA_UNUSED_PIN, SPI_RFM_RESET, SPI_RFM_DIO0, SPI_RFM_DIO1);
-
-    profile_cb.init();
+    profile_init();
 
     ble_task_done_sem = xSemaphoreCreateBinary();
     join_task_done_sem = xSemaphoreCreateBinary();
@@ -240,30 +229,27 @@ void app_main()
     send_mutex = xSemaphoreCreateMutex();
 
     //init done
-
     uint64_t init_time = 0;
 
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
-        lora_set_session(dev_addr, nwk_key, art_key, seqno_up, seqno_dw);
         init_time = esp_timer_get_time();
         measure_and_send(false);
     } else {
-        /* @formatter:off */
+// @formatter:off
         esp_timer_create_args_t timer_args = {
                 .callback = &send_timer_callback,
                 .name = "send_timer"
         };
-        /* @formatter:on */
+// @formatter:on
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &send_timer));
 
-        xTaskCreate(send_task_func, "send_task", 4 * 1024, NULL, 10, &send_task);
-        if (dev_addr) {
-            lora_set_session(dev_addr, nwk_key, art_key, seqno_up, seqno_dw);
+        xTaskCreate(send_task_func, "send_task", 2 * 1024, NULL, 10, &send_task);
+        if (lora_is_joined()) {
             xSemaphoreGive(join_task_done_sem);
 
             esp_timer_start_once(send_timer, get_timer_timeout());
         } else {
-            xTaskCreate(join_task_func, "join_task", 4 * 1024, NULL, 10, &join_task);
+            xTaskCreate(join_task_func, "join_task", 2 * 1024, NULL, 10, &join_task);
         }
 
         gpio_pad_select_gpio(BUTTON_BLE);
@@ -273,7 +259,7 @@ void app_main()
         gpio_isr_handler_add(BUTTON_BLE, button_isr_handler, NULL);
 
         if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
-            xTaskCreate(ble_task_func, "ble_task", 4 * 1024, NULL, 10, NULL);
+            xTaskCreate(ble_task_func, "ble_task", 2 * 1024, NULL, 10, NULL);
         } else {
             xSemaphoreGive(ble_task_done_sem);
         }
@@ -285,15 +271,14 @@ void app_main()
         xSemaphoreGive(send_mutex);
     }
 
-    lora_get_counters(&seqno_up, &seqno_dw);
     lora_deinit();
     led_deinit();
 
-    profile_cb.deinit();
+    profile_deinit();
 
     esp_sleep_enable_ext0_wakeup(BUTTON_BLE, 0);
-    if (dev_addr) {
-        /* only if has session */
+    if (lora_is_joined()) {
+        // only if has session
         esp_sleep_enable_timer_wakeup(get_timer_timeout() - init_time);
     }
     ESP_LOGI(TAG, "Entering to deep sleep (run time %d)...", xTaskGetTickCount() * portTICK_PERIOD_MS);

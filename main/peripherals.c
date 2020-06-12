@@ -13,7 +13,7 @@
 #define ACK_VAL             0x0 /*!< I2C ack value */
 #define NACK_VAL            0x1 /*!< I2C nack value */
 
-static ledc_channel_t led_channel[] = { LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2 };
+static ledc_channel_t led_channel[] = { LEDC_CHANNEL_0, LEDC_CHANNEL_1 };
 
 void spi_init()
 {
@@ -96,8 +96,8 @@ void led_init()
             .speed_mode = LEDC_HIGH_SPEED_MODE,
             .timer_num  = LEDC_TIMER_0
     };
-    /* @formatter:on */
-   ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
+                    /* @formatter:on */
+    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
 
     /* @formatter:off */
     ledc_channel_config_t ledc_channel = {
@@ -108,15 +108,11 @@ void led_init()
             .timer_sel  = LEDC_TIMER_0,
             .duty       = 0
     };
-    /* @formatter:on */
+                    /* @formatter:on */
     ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
 
     ledc_channel.gpio_num = LED_LORA;
     ledc_channel.channel = LEDC_CHANNEL_1;
-    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
-
-    ledc_channel.gpio_num = LED_ERR;
-    ledc_channel.channel = LEDC_CHANNEL_2;
     ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
 
     //ledc_fade_func_install(0);
@@ -126,7 +122,6 @@ void led_deinit()
 {
     ledc_stop(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_0, 0);
     ledc_stop(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_1, 0);
-    ledc_stop(LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_2, 0);
 }
 
 void led_set_state(led_id_t led_id, led_state_t state)
@@ -138,8 +133,14 @@ void led_set_state(led_id_t led_id, led_state_t state)
         case LED_STATE_OFF:
             ledc_set_duty(LEDC_HIGH_SPEED_MODE, led_channel[led_id], 0);
             break;
-        case LED_STATE_FLASH:
-            ledc_set_duty(LEDC_HIGH_SPEED_MODE, led_channel[led_id], 50);
+        case LED_STATE_DUTY_5:
+            ledc_set_duty(LEDC_HIGH_SPEED_MODE, led_channel[led_id], 1023 / 100 * 5);
+            break;
+        case LED_STATE_DUTY_50:
+            ledc_set_duty(LEDC_HIGH_SPEED_MODE, led_channel[led_id], 1023 / 100 * 50);
+            break;
+        case LED_STATE_DUTY_90:
+            ledc_set_duty(LEDC_HIGH_SPEED_MODE, led_channel[led_id], 1023 / 100 * 75);
             break;
     }
     ledc_update_duty(LEDC_HIGH_SPEED_MODE, led_channel[led_id]);
