@@ -13,6 +13,8 @@ extern QueueHandle_t ble_event_queue;
 
 void ble_init();
 
+bool ble_has_context();
+
 void ble_deinit();
 
 void ble_set_battery(uint8_t battery);

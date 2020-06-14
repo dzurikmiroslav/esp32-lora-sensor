@@ -18,13 +18,12 @@
 #include "ble.h"
 #include "sensor.h"
 #include "peripherals.h"
-#include "profile_environmental.h"
-#include "profile_soil_moisture.h"
 #include "battery.h"
+#include "profile.h"
 
-#define BLE_CONNECTION_TIMEOUT  60000  /* 60sec */
-#define LORA_JOIN_TIMEOUT       900000 /* 15min */
-#define LIRA_ERROR_TIMEOUT      30000  /* 30sec */
+#define BLE_CONNECTION_TIMEOUT  60000  // 60sec
+#define LORA_JOIN_TIMEOUT       900000 // 15min
+#define LIRA_ERROR_TIMEOUT      30000  // 30se
 
 static const char *TAG = "main";
 
@@ -33,23 +32,19 @@ static RTC_DATA_ATTR struct timeval send_time;
 static esp_timer_handle_t send_timer = NULL;
 
 static TaskHandle_t join_task;
-static TaskHandle_t send_task;
+static TaskHandle_t periodic_execute_task;
 
 static SemaphoreHandle_t join_task_done_sem;
 static SemaphoreHandle_t ble_task_done_sem;
 static SemaphoreHandle_t send_sem;
 static SemaphoreHandle_t join_mutex;
-static SemaphoreHandle_t send_mutex;
+static SemaphoreHandle_t periodic_execute_mutex;
 
 nvs_handle storage;
 
-void (*profile_init)();
-void (*profile_execute)(bool lora, bool ble);
-void (*profile_deinit)();
-
 static uint64_t get_timer_timeout()
 {
-    uint16_t period = 60; /* default 60s period */
+    uint16_t period = 60; // default 60s period
     nvs_get_u16(storage, STORAGE_KEY_PERIOD, &period);
 
     uint64_t timeout = period * 1000000;
@@ -111,7 +106,8 @@ static void ble_task_func(void *param)
 
     led_set_state(LED_ID_BLE, LED_STATE_DUTY_50);
 
-    profile_execute(false, true);
+    profile_measure();
+    profile_send_ble();
 
     while ((receved = xQueueReceive(ble_event_queue, &event, BLE_CONNECTION_TIMEOUT / portTICK_PERIOD_MS)) || connection) {
         if (!receved) continue;
@@ -137,8 +133,6 @@ static void ble_task_func(void *param)
                 }
                 xSemaphoreGive(join_mutex);
                 xSemaphoreTake(join_task_done_sem, 0);
-//                nvs_erase_key(storage, STORAGE_KEY_LORA_DEV_NONCE);
-//                nvs_erase_key(storage, STORAGE_KEY_LORA_JOIN_NONCE);
                 xTaskCreate(join_task_func, "join_task", 4 * 1024, NULL, 10, &join_task);
                 break;
             default:
@@ -164,24 +158,23 @@ static void send_timer_callback(void *arg)
     xSemaphoreGive(send_sem);
 }
 
-static void measure_and_send(bool has_ble)
-{
-    led_set_state(LED_ID_LORA, LED_STATE_DUTY_5);
-
-    gettimeofday(&send_time, NULL);
-    profile_execute(lora_is_joined(), has_ble);
-
-    led_set_state(LED_ID_LORA, LED_STATE_OFF);
-}
-
-static void send_task_func(void *param)
+static void periodic_execute_func(void *param)
 {
     while (true) {
         xSemaphoreTake(send_sem, portMAX_DELAY);
-        xSemaphoreTake(send_mutex, portMAX_DELAY);
-        measure_and_send(true);
+        xSemaphoreTake(periodic_execute_mutex, portMAX_DELAY);
+
+        led_set_state(LED_ID_LORA, LED_STATE_DUTY_5);
+
+        gettimeofday(&send_time, NULL);
+        profile_measure();
+        if (ble_has_context()) profile_send_ble();
+        profile_send_lora();
+
+        led_set_state(LED_ID_LORA, LED_STATE_OFF);
+
         esp_timer_start_once(send_timer, get_timer_timeout());
-        xSemaphoreGive(send_mutex);
+        xSemaphoreGive(periodic_execute_mutex);
     }
 }
 
@@ -200,16 +193,29 @@ void app_main()
 
     ESP_ERROR_CHECK(gpio_install_isr_service(ESP_INTR_FLAG_IRAM));
 
-#ifdef SENSOR_PROFILE_DEFALUT
-    profile_init = &environmental_mousture_init;
-    profile_execute = &environmental_execute;
-    profile_deinit = &environmental_deinit;
-#endif /* SENSOR_PROFILE_DEFALUT */
-#ifdef SENSOR_PROFILE_SOIL_MOSTURE
-    profile_init = &soil_mousture_init$;
-    profile_execute = &soil_mousture_execute;
-    profile_deinit = &soil_mousture_deinit;
-#endif /* SENSOR_PROFILE_SOIL_MOSTURE */
+    ble_task_done_sem = xSemaphoreCreateBinary();
+    xSemaphoreGive(ble_task_done_sem);
+    join_task_done_sem = xSemaphoreCreateBinary();
+    xSemaphoreGive(join_task_done_sem);
+    send_sem = xSemaphoreCreateBinary();
+    join_mutex = xSemaphoreCreateMutex();
+    periodic_execute_mutex = xSemaphoreCreateMutex();
+
+// @formatter:off
+    esp_timer_create_args_t timer_args = {
+            .callback = &send_timer_callback,
+            .name = "send_timer"
+    };
+// @formatter:on
+    ESP_ERROR_CHECK(esp_timer_create(&timer_args, &send_timer));
+
+    gpio_pad_select_gpio(BUTTON_BLE);
+    gpio_set_direction(BUTTON_BLE, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(BUTTON_BLE, GPIO_PULLUP_ONLY);
+    gpio_set_intr_type(BUTTON_BLE, GPIO_INTR_NEGEDGE);
+    gpio_isr_handler_add(BUTTON_BLE, button_isr_handler, NULL);
+
+    xTaskCreate(periodic_execute_func, "periodic_execute_task", 2 * 1024, NULL, 10, &periodic_execute_task);
 
     led_init();
     battery_measure_init();
@@ -219,67 +225,41 @@ void app_main()
     sensor_init();
     spi_init();
     lora_init();
-
     profile_init();
 
-    ble_task_done_sem = xSemaphoreCreateBinary();
-    join_task_done_sem = xSemaphoreCreateBinary();
-    send_sem = xSemaphoreCreateBinary();
-    join_mutex = xSemaphoreCreateMutex();
-    send_mutex = xSemaphoreCreateMutex();
-
     //init done
-    uint64_t init_time = 0;
-
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
-        init_time = esp_timer_get_time();
-        measure_and_send(false);
+        xSemaphoreGive(send_sem);
     } else {
-// @formatter:off
-        esp_timer_create_args_t timer_args = {
-                .callback = &send_timer_callback,
-                .name = "send_timer"
-        };
-// @formatter:on
-        ESP_ERROR_CHECK(esp_timer_create(&timer_args, &send_timer));
-
-        xTaskCreate(send_task_func, "send_task", 2 * 1024, NULL, 10, &send_task);
         if (lora_is_joined()) {
             xSemaphoreGive(join_task_done_sem);
 
             esp_timer_start_once(send_timer, get_timer_timeout());
         } else {
+            xSemaphoreTake(join_task_done_sem, portMAX_DELAY);
             xTaskCreate(join_task_func, "join_task", 2 * 1024, NULL, 10, &join_task);
         }
-
-        gpio_pad_select_gpio(BUTTON_BLE);
-        gpio_set_direction(BUTTON_BLE, GPIO_MODE_INPUT);
-        gpio_set_pull_mode(BUTTON_BLE, GPIO_PULLUP_ONLY);
-        gpio_set_intr_type(BUTTON_BLE, GPIO_INTR_NEGEDGE);
-        gpio_isr_handler_add(BUTTON_BLE, button_isr_handler, NULL);
-
-        if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
-            xTaskCreate(ble_task_func, "ble_task", 2 * 1024, NULL, 10, NULL);
-        } else {
-            xSemaphoreGive(ble_task_done_sem);
-        }
-
-        xSemaphoreTake(join_task_done_sem, portMAX_DELAY);
-        xSemaphoreTake(ble_task_done_sem, portMAX_DELAY);
-        xSemaphoreTake(send_mutex, portMAX_DELAY);
-        vTaskDelete(send_task);
-        xSemaphoreGive(send_mutex);
     }
+
+    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
+        xSemaphoreTake(ble_task_done_sem, portMAX_DELAY);
+        xTaskCreate(ble_task_func, "ble_task", 2 * 1024, NULL, 10, NULL);
+    }
+
+    //wait to finish all stuff...
+    xSemaphoreTake(join_task_done_sem, portMAX_DELAY);
+    xSemaphoreTake(ble_task_done_sem, portMAX_DELAY);
+    xSemaphoreTake(periodic_execute_mutex, portMAX_DELAY);
+    vTaskDelete(periodic_execute_task);
+    xSemaphoreGive(periodic_execute_mutex);
 
     lora_deinit();
     led_deinit();
-
     profile_deinit();
 
     esp_sleep_enable_ext0_wakeup(BUTTON_BLE, 0);
-    if (lora_is_joined()) {
-        // only if has session
-        esp_sleep_enable_timer_wakeup(get_timer_timeout() - init_time);
+    if (lora_is_joined()) { // only if has session
+        esp_sleep_enable_timer_wakeup(get_timer_timeout());
     }
     ESP_LOGI(TAG, "Entering to deep sleep (run time %d)...", xTaskGetTickCount() * portTICK_PERIOD_MS);
     esp_deep_sleep_start();

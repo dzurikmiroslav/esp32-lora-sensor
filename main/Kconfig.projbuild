@@ -1,4 +1,4 @@
-menu "LoRa Sensor Configuration"
+menu "Sensor settings"
 	
 	choice SENSOR_TYPE
         prompt "Internal sensor type"      
@@ -11,10 +11,10 @@ menu "LoRa Sensor Configuration"
     endchoice
 
 	choice SENSOR_PROFILE
-        prompt "Internal sensor type"      
-        default SENSOR_PROFILE_DEFALUT
+        prompt "Sensor profile"      
+        default SENSOR_PROFILE_DEFAULT
 
-        config SENSOR_PROFILE_DEFALUT
+        config SENSOR_PROFILE_DEFAULT
             bool "Default"
             help
                  Measure temperature and humdity trought internal sensor

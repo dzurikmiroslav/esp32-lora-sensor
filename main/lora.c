@@ -4,8 +4,10 @@
 #include "freertos/semphr.h"
 #include "esp_log.h"
 #include "driver/spi_master.h"
-#include "nvs.h"
 #include "driver/timer.h"
+#include "nvs.h"
+#include "esp32/rom/rtc.h"
+#include "soc/rtc.h"
 #include "ldl_mac.h"
 #include "ldl_radio.h"
 #include "ldl_sm.h"
@@ -13,7 +15,6 @@
 
 #include "storage_key.h"
 #include "peripherals.h"
-
 
 #define TPS 1000000UL  /* ticks per second (microsecond) */
 #define DIVIDER 128
@@ -33,7 +34,6 @@ static RTC_DATA_ATTR struct ldl_mac_session mac_session = {0};
 static struct ldl_radio radio;
 static struct ldl_mac mac;
 
-
 typedef enum
 {
     WAKE_NONE, WAKE_JOIN, WAKE_SEND
@@ -45,16 +45,21 @@ static uint8_t send_confirmed;
 
 uint32_t LDL_System_ticks(void *app)
 {
-//        uint64_t val;
-//        timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &val);
-//        return (uint32_t) val;
-    return esp_timer_get_time();
+        uint64_t val;
+        timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &val);
+        return (uint32_t) val;
+//    return esp_timer_get_time();
+}
+
+uint8_t LDL_System_getBatteryLevel(void *app)
+{
+    return 100;
 }
 
 uint32_t LDL_System_tps(void)
 {
-//   return (((READ_PERI_REG(RTC_APB_FREQ_REG)) & UINT16_MAX) << 12) / DIVIDER;
-    return TPS;
+   return (((READ_PERI_REG(RTC_APB_FREQ_REG)) & UINT16_MAX) << 12) / DIVIDER;
+//    return TPS;
 }
 
 uint32_t LDL_System_eps(void)
@@ -99,69 +104,44 @@ void ldl_handler(void *app, enum ldl_mac_response_type type, const union ldl_mac
     bool join_status;
     switch (type) {
         case LDL_MAC_CHIP_ERROR:
-            //assert(0);
-            ESP_LOGI(TAG, "LDL_MAC_CHIP_ERROR");
-            break;
-        case LDL_MAC_RESET:
-            ESP_LOGI(TAG, "LDL_MAC_RESET");
             break;
         case LDL_MAC_STARTUP:
-            ESP_LOGI(TAG, "LDL_MAC_STARTUP");
             srand(arg->startup.entropy);
             break;
         case LDL_MAC_JOIN_COMPLETE:
-            ESP_LOGI(TAG, "LDL_MAC_JOIN_COMPLETE %d %d", arg->join_complete.nextDevNonce, arg->join_complete.joinNonce);
+#ifdef CONFIG_LORA_LORAWAN_VERSION_1_1
             nvs_set_u16(storage, STORAGE_KEY_LORA_DEV_NONCE, arg->join_complete.nextDevNonce);
             nvs_set_u32(storage, STORAGE_KEY_LORA_JOIN_NONCE, arg->join_complete.joinNonce);
+#endif /* CONFIG_LORA_LORAWAN_VERSION_1_1 */
             join_status = true;
             xQueueSend(join_queue, &join_status, portMAX_DELAY);
             break;
         case LDL_MAC_JOIN_TIMEOUT:
-            ESP_LOGI(TAG, "LDL_MAC_JOIN_TIMEOUT");
             join_status = false;
             xQueueSend(join_queue, &join_status, portMAX_DELAY);
             break;
-        case LDL_MAC_DATA_COMPLETE:
-            ESP_LOGI(TAG, "LDL_MAC_DATA_COMPLETE");
-            break;
-        case LDL_MAC_DATA_TIMEOUT:
-            ESP_LOGI(TAG, "LDL_MAC_DATA_TIMEOUT");
-            break;
-        case LDL_MAC_DATA_NAK:
-            ESP_LOGI(TAG, "LDL_MAC_DATA_NAK");
-            break;
-        case LDL_MAC_RX:
-            ESP_LOGI(TAG, "LDL_MAC_RX");
-            break;
-        case LDL_MAC_LINK_STATUS:
-            ESP_LOGI(TAG, "LDL_MAC_LINK_STATUS");
-            break;
         case LDL_MAC_RX1_SLOT:
-            ESP_LOGI(TAG, "LDL_MAC_RX1_SLOT %d %d", arg->rx_slot.error, arg->rx_slot.margin);
+            ESP_LOGI(TAG, "RX1 slot");
             break;
         case LDL_MAC_RX2_SLOT:
-            ESP_LOGI(TAG, "LDL_MAC_RX2_SLOT %d %d", arg->rx_slot.error, arg->rx_slot.margin);
+            ESP_LOGI(TAG, "RX2 slot");
             break;
         case LDL_MAC_DOWNSTREAM:
-            ESP_LOGI(TAG, "LDL_MAC_DOWNSTREAM");
+            ESP_LOGI(TAG, "Downstrean");
             break;
         case LDL_MAC_TX_COMPLETE:
-            ESP_LOGI(TAG, "LDL_MAC_TX_COMPLETE");
+            ESP_LOGI(TAG, "TX complete");
             break;
         case LDL_MAC_TX_BEGIN:
-            ESP_LOGI(TAG, "LDL_MAC_TX_BEGIN");
+            ESP_LOGI(TAG, "TX begin");
             break;
         case LDL_MAC_SESSION_UPDATED:
-            ESP_LOGI(TAG, "LDL_MAC_SESSION_UPDATED");
             if (arg->session_updated.session->joined) {
                 memcpy(&mac_session, arg->session_updated.session, sizeof(struct ldl_mac_session));
             } else {
                 memset(&mac_session, 0, sizeof(struct ldl_mac_session));
             }
             xSemaphoreGive(send_semhr);
-            break;
-        case LDL_MAC_DEVICE_TIME:
-            ESP_LOGI(TAG, "LDL_MAC_DEVICE_TIME");
             break;
         default:
             break;
@@ -202,23 +182,13 @@ static void process_func(void *param)
                 default:
                     break;
             }
-
         }
 
         LDL_MAC_process(&mac);
 
-        if (wake != WAKE_JOIN) {
-            uint32_t ticks_until_next_event = LDL_MAC_ticksUntilNextEvent(&mac);
-            //if (ticks_until_next_event > 0) {
-            //     //ticks_until_next_event %= 5 * LDL_System_tps();
-//            ESP_LOGI(TAG, "Delay %d (ticks %d)",
-//                    (ticks_until_next_event / (LDL_System_tps() / 1000)) / portTICK_PERIOD_MS,
-//                    ticks_until_next_event );
-            int i = xQueueReceive(wake_queue, &wake,
-                    (ticks_until_next_event / ((LDL_System_tps() / 1000)) / portTICK_PERIOD_MS));
-            ESP_LOGI(TAG, "xQueueReceive %d %d", i, wake);
-            // }
-        }
+        uint32_t ticks_until_next_event = LDL_MAC_ticksUntilNextEvent(&mac);
+        //ESP_LOGI(TAG, "ticks_until_next_event %d", ticks_until_next_event);
+        xQueueReceive(wake_queue, &wake, (ticks_until_next_event / ((LDL_System_tps() / 1000)) / portTICK_PERIOD_MS));
     }
 }
 
@@ -242,9 +212,11 @@ void mac_init()
     arg.sm = &sm;
     if (mac_session.joined) {
         arg.session = &mac_session;
-        nvs_get_u16(storage, STORAGE_KEY_LORA_DEV_NONCE, &arg.devNonce);
-        nvs_get_u32(storage, STORAGE_KEY_LORA_JOIN_NONCE, &arg.joinNonce);
     }
+#ifdef CONFIG_LORA_LORAWAN_VERSION_1_1
+    nvs_get_u16(storage, STORAGE_KEY_LORA_DEV_NONCE, &arg.devNonce);
+    nvs_get_u32(storage, STORAGE_KEY_LORA_JOIN_NONCE, &arg.joinNonce);
+#endif /* CONFIG_LORA_LORAWAN_VERSION_1_1 */
     arg.gain = 0;
 
     uint8_t join_eui[16];
@@ -284,22 +256,29 @@ void lora_init()
     gpio_set_intr_type(RFM_DIO1, GPIO_INTR_POSEDGE);
     gpio_isr_handler_add(RFM_DIO1, dio_isr_handler, (void*) 1);
 
-    /* @formatter:off */
+// @formatter:off
     spi_device_interface_config_t spi_dev_cfg = {
-        .mode = 1,
-        .clock_speed_hz = 4000000,
-        .command_bits = 0,
-        .address_bits = 8,
-        .spics_io_num = RFM_NSS,
-        .queue_size = 1,
-        .cs_ena_posttrans = 2
+            .mode = 1,
+            .clock_speed_hz = 4000000,
+            .command_bits = 0,
+            .address_bits = 8,
+            .spics_io_num = RFM_NSS,
+            .queue_size = 1,
+            .cs_ena_posttrans = 2
     };
-            																		    /* @formatter:on */
+// @formatter:on
     ESP_ERROR_CHECK(spi_bus_add_device(HSPI_HOST, &spi_dev_cfg, &spi_handle));
 
-    timer_config_t timer_config = { .alarm_en = false, .counter_en = false, .intr_type = TIMER_INTR_LEVEL,
-            .counter_dir = TIMER_COUNT_UP, .auto_reload = false, .divider = DIVIDER };
-    /* @formatter:on */
+// @formatter:off
+    timer_config_t timer_config = {
+            .alarm_en = false,
+            .counter_en = false,
+            .intr_type = TIMER_INTR_LEVEL,
+            .counter_dir = TIMER_COUNT_UP,
+            .auto_reload = false,
+            .divider = DIVIDER
+    };
+// @formatter:on */
     timer_init(TIMER_GROUP_0, TIMER_0, &timer_config);
     timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0x0);
     timer_start(TIMER_GROUP_0, TIMER_0);
@@ -309,7 +288,7 @@ void lora_init()
 
     mac_init();
 
-    xTaskCreate(process_func, "process_task", 4 * 1024, NULL, 2, &process_task);
+    xTaskCreate(process_func, "lora_process_task", 4 * 1024, NULL, 2, &process_task);
 }
 
 bool lora_is_joined()
@@ -330,8 +309,6 @@ bool lora_join()
 {
     wake_t wake = WAKE_JOIN;
     xQueueSend(wake_queue, &wake, portMAX_DELAY);
-
-    ESP_LOGI(TAG, "lora_join");
 
     bool joined;
     xQueueReceive(join_queue, &joined, portMAX_DELAY);

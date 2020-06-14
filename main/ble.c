@@ -439,7 +439,9 @@ void ble_init()
 
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
-    esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+    esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT()
+    ;
+
     ESP_ERROR_CHECK(esp_bt_controller_init(&bt_cfg));
 
     ESP_ERROR_CHECK(esp_bt_controller_enable(ESP_BT_MODE_BLE));
@@ -454,6 +456,11 @@ void ble_init()
 
     ESP_ERROR_CHECK(esp_ble_gatt_set_local_mtu(500));
     ESP_ERROR_CHECK(esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_N12));
+}
+
+bool ble_has_context()
+{
+    return ble_gatts_if != 0;
 }
 
 void ble_deinit()

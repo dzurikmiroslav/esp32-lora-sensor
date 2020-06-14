@@ -96,7 +96,7 @@ void led_init()
             .speed_mode = LEDC_HIGH_SPEED_MODE,
             .timer_num  = LEDC_TIMER_0
     };
-                    /* @formatter:on */
+                        /* @formatter:on */
     ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
 
     /* @formatter:off */
@@ -108,7 +108,7 @@ void led_init()
             .timer_sel  = LEDC_TIMER_0,
             .duty       = 0
     };
-                    /* @formatter:on */
+                        /* @formatter:on */
     ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
 
     ledc_channel.gpio_num = LED_LORA;

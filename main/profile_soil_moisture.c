@@ -1,3 +1,6 @@
+#include "sdkconfig.h"
+#ifdef SENSOR_PROFILE_SOIL_MOSTURE
+TODO whole refacktor
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs.h"
@@ -5,7 +8,7 @@
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 
-#include "profile_soil_moisture.h"
+#include "profile.h"
 #include "peripherals.h"
 #include "battery.h"
 #include "sensor.h"
@@ -31,8 +34,10 @@ typedef struct
 
 static esp_adc_cal_characteristics_t adc_char;
 
-void soil_mousture_init()
+void profile_init()
 {
+    ESP_LOGI(TAG, "Init");
+
     gpio_pad_select_gpio(GPIO_POWER);
     gpio_set_direction(GPIO_POWER, GPIO_MODE_OUTPUT);
     gpio_set_level(GPIO_POWER, 0);
@@ -43,8 +48,10 @@ void soil_mousture_init()
     esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN, ADC_WIDTH, 1100, &adc_char);
 }
 
-void soil_mousture_execute(bool lora, bool ble)
+void profile_execute(bool lora, bool ble)
 {
+    ESP_LOGI(TAG, "Execute");
+
     uint8_t battery;
     float battery_voltage;
     battery_measure(&battery, &battery_voltage);
@@ -121,7 +128,10 @@ void soil_mousture_execute(bool lora, bool ble)
     }
 }
 
-void soil_mousture_deinit()
+void profile_deinit()
 {
+    ESP_LOGI(TAG, "Deinit");
     gpio_set_direction(GPIO_POWER, GPIO_MODE_DISABLE);
 }
+
+#endif /* SENSOR_PROFILE_SOIL_MOSTURE */
