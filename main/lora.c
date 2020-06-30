@@ -45,9 +45,9 @@ static uint8_t send_confirmed;
 
 uint32_t LDL_System_ticks(void *app)
 {
-        uint64_t val;
-        timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &val);
-        return (uint32_t) val;
+    uint64_t val;
+    timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &val);
+    return (uint32_t) val;
 //    return esp_timer_get_time();
 }
 
@@ -58,12 +58,13 @@ uint8_t LDL_System_getBatteryLevel(void *app)
 
 uint32_t LDL_System_tps(void)
 {
-   return (((READ_PERI_REG(RTC_APB_FREQ_REG)) & UINT16_MAX) << 12) / DIVIDER;
+    return (((READ_PERI_REG(RTC_APB_FREQ_REG)) & UINT16_MAX) << 12) / DIVIDER;
 //    return TPS;
 }
 
 uint32_t LDL_System_eps(void)
 {
+    //return (LDL_System_tps() / 1000) * 5;
     return 5000;
 }
 
@@ -121,10 +122,10 @@ void ldl_handler(void *app, enum ldl_mac_response_type type, const union ldl_mac
             xQueueSend(join_queue, &join_status, portMAX_DELAY);
             break;
         case LDL_MAC_RX1_SLOT:
-            ESP_LOGI(TAG, "RX1 slot");
+            ESP_LOGI(TAG, "RX1 slot %d %d", arg->rx_slot.error, arg->rx_slot.margin);
             break;
         case LDL_MAC_RX2_SLOT:
-            ESP_LOGI(TAG, "RX2 slot");
+            ESP_LOGI(TAG, "RX2 slot %d %d", arg->rx_slot.error, arg->rx_slot.margin);
             break;
         case LDL_MAC_DOWNSTREAM:
             ESP_LOGI(TAG, "Downstrean");
@@ -143,8 +144,28 @@ void ldl_handler(void *app, enum ldl_mac_response_type type, const union ldl_mac
             }
             xSemaphoreGive(send_semhr);
             break;
-        default:
+        case LDL_MAC_RESET:
+            ESP_LOGI(TAG, "LDL_MAC_RESET");
             break;
+        case LDL_MAC_DATA_COMPLETE:
+            ESP_LOGI(TAG, "LDL_MAC_DATA_COMPLETE");
+            break;
+        case LDL_MAC_DATA_NAK:
+            ESP_LOGI(TAG, "LDL_MAC_DATA_NAK");
+            break;
+        case LDL_MAC_RX:
+            ESP_LOGI(TAG, "LDL_MAC_RX");
+            break;
+        case LDL_MAC_LINK_STATUS:
+            ESP_LOGI(TAG, "LDL_MAC_LINK_STATUS");
+            break;
+        case LDL_MAC_DEVICE_TIME:
+            ESP_LOGI(TAG, "LDL_MAC_DEVICE_TIME");
+            break;
+        case LDL_MAC_DATA_TIMEOUT:
+            ESP_LOGI(TAG, "LDL_MAC_DATA_TIMEOUT");
+            break;
+
     }
 }
 
@@ -185,9 +206,7 @@ static void process_func(void *param)
         }
 
         LDL_MAC_process(&mac);
-
         uint32_t ticks_until_next_event = LDL_MAC_ticksUntilNextEvent(&mac);
-        //ESP_LOGI(TAG, "ticks_until_next_event %d", ticks_until_next_event);
         xQueueReceive(wake_queue, &wake, (ticks_until_next_event / ((LDL_System_tps() / 1000)) / portTICK_PERIOD_MS));
     }
 }
@@ -307,6 +326,8 @@ void lora_deinit()
 
 bool lora_join()
 {
+    vTaskDelay(20 / portTICK_PERIOD_MS); // TODO
+
     wake_t wake = WAKE_JOIN;
     xQueueSend(wake_queue, &wake, portMAX_DELAY);
 
