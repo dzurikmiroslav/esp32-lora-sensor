@@ -1,0 +1,27 @@
+menu "LoRa settings"
+
+	choice LORA_LORAWAN_VERSION
+        prompt "LoRaWAN version"      
+        default LORA_LORAWAN_VERSION_1_1
+
+        config LORA_LORAWAN_VERSION_1
+            bool "1.0"
+        config LORA_LORAWAN_VERSION_1_1
+            bool "1.1"
+    endchoice
+    
+    choice LORA_FREQUENCY
+        prompt "LoRaWAN version"      
+        default LORA_FREQUENCY_EU_863_870
+
+        config LORA_FREQUENCY_EU_863_870
+            bool "EU 868-780MHz"
+        config LORA_FREQUENCY_EU_443
+            bool "EU 443MHz"
+        config LORA_FREQUENCY_US_902_928
+            bool "US 902-928MHz"
+        config LORA_FREQUENCY_AU_915_928
+            bool "AU 915-928MHz"
+    endchoice
+
+endmenu

@@ -1,4 +1,4 @@
-menu "LoRa Sensor Configuration"
+menu "Sensor settings"
 	
 	choice SENSOR_TYPE
         prompt "Internal sensor type"      
@@ -8,6 +8,20 @@ menu "LoRa Sensor Configuration"
             bool "DHT10"
         config SENSOR_TYPE_DHT22
             bool "DHT22"
+    endchoice
+
+	choice SENSOR_PROFILE
+        prompt "Sensor profile"      
+        default SENSOR_PROFILE_DEFAULT
+
+        config SENSOR_PROFILE_DEFAULT
+            bool "Default"
+            help
+                 Measure temperature and humdity trought internal sensor
+        config SENSOR_PROFILE_SOIL_MOSTURE
+            bool "Soil mostuire"
+            help
+                 Measure soil moisture
     endchoice
 
 endmenu

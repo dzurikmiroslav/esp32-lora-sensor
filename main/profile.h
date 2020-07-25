@@ -1,25 +1,14 @@
-#ifndef PROFILE_PROFILE_H_
-#define PROFILE_PROFILE_H_
+#ifndef PROFILE_H_
+#define PROFILE_H_
 
-#include <stdbool.h>
+void profile_init();
 
-typedef enum {
-    PROFILE_ENVIRONMENTAL,
-    PROFILE_SOIL_MOISTURE
-} profile_t;
+void profile_measure();
 
-typedef void (*profile_init_cb_t)();
+void profile_send_ble();
 
-typedef void (*profile_execute_cb_t)(bool lora, bool ble);
+void profile_send_lora();
 
-typedef void (*profile_deinit_cb_t)();
+void profile_deinit();
 
-typedef struct {
-    profile_init_cb_t init;
-    profile_execute_cb_t execute;
-    profile_deinit_cb_t deinit;
-} profile_callbacks_t;
-
-profile_callbacks_t profile_get_callbacks(profile_t profile);
-
-#endif /* PROFILE_PROFILE_H_ */
+#endif /* PROFILE_H_ */

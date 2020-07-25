@@ -6,16 +6,14 @@
 
 typedef enum
 {
-    BLE_EVENT_CONNECT,
-    BLE_EVENT_DISCONNECT,
-    BLE_EVENT_PERIOD_UPDATE,
-    BLE_EVENT_LORA_UPDATED,
-    BLE_EVENT_PROFILE_UPDATE
+    BLE_EVENT_CONNECT, BLE_EVENT_DISCONNECT, BLE_EVENT_PERIOD_UPDATE, BLE_EVENT_LORA_UPDATED
 } ble_event_t;
 
 extern QueueHandle_t ble_event_queue;
 
 void ble_init();
+
+bool ble_has_context();
 
 void ble_deinit();
 

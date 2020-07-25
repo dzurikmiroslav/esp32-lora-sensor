@@ -1,12 +1,9 @@
 #include "sdkconfig.h"
-#ifdef SENSOR_PROFILE_SOIL_MOSTURE
-TODO whole refacktor
+#ifdef CONFIG_SENSOR_PROFILE_DEFAULT
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs.h"
 #include "esp_log.h"
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
 
 #include "profile.h"
 #include "peripherals.h"
@@ -17,41 +14,87 @@ TODO whole refacktor
 #include "storage_key.h"
 #include "cayenne.h"
 
-#define GPIO_POWER      GPIO_NUM_32
-#define INPUT_CHANNEL   ADC1_CHANNEL_7
-#define ADC_ATTEN       ADC_ATTEN_DB_11
-#define ADC_WIDTH       ADC_WIDTH_BIT_12
-
-static const char *TAG = "profile_soil_mosture";
-
 typedef struct
 {
     uint16_t humidity;
     int16_t temperature;
     uint8_t battery;
-    uint16_t soil_moisture;
 } __attribute__((packed)) native_payload_t;
 
-static esp_adc_cal_characteristics_t adc_char;
+static const char *TAG = "profile_default";
+
+static float humidity;
+static float temperature;
+static uint8_t battery;
+static float battery_voltage;
 
 void profile_init()
 {
     ESP_LOGI(TAG, "Init");
+}
 
-    gpio_pad_select_gpio(GPIO_POWER);
-    gpio_set_direction(GPIO_POWER, GPIO_MODE_OUTPUT);
-    gpio_set_level(GPIO_POWER, 0);
+void profile_measure()
+{
+    ESP_LOGI(TAG, "Measure");
+    sensor_read(&humidity, &temperature);
+    battery_measure(&battery, &battery_voltage);
+}
 
-    adc1_config_width(ADC_WIDTH);
-    adc1_config_channel_atten(INPUT_CHANNEL, ADC_ATTEN);
+void profile_send_lora()
+{
+    uint8_t format = 0;
+    nvs_get_u8(storage, STORAGE_KEY_PAYL_FMT, &format);
 
-    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN, ADC_WIDTH, 1100, &adc_char);
+    uint8_t *payload;
+    size_t length = 0;
+
+    if (format == 1) {
+        //cayenne lpp payload
+        uint8_t humidity_val = humidity * 2;
+        int16_t temperature_val = temperature * 10;
+        int16_t battery_val = battery_voltage * 100;
+
+        uint8_t len = 0;
+        uint8_t lpp[11];
+        lpp[len++] = 1;
+        lpp[len++] = CAYENNE_LPP_RELATIVE_HUMIDITY;
+        lpp[len++] = humidity_val;
+        lpp[len++] = 2;
+        lpp[len++] = CAYENNE_LPP_TEMPERATURE;
+        lpp[len++] = temperature_val >> 8;
+        lpp[len++] = temperature_val;
+        lpp[len++] = 3;
+        lpp[len++] = CAYENNE_LPP_ANALOG_INPUT;
+        lpp[len++] = battery_val >> 8;
+        lpp[len++] = battery_val;
+
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, lpp, len, ESP_LOG_INFO);
+
+        payload = lpp;
+        length = len;
+    } else {
+        //native payload
+        native_payload_t native_payload;
+        native_payload.humidity = humidity * 100;
+        native_payload.temperature = temperature * 100;
+        native_payload.battery = battery;
+
+        payload = (uint8_t*) &native_payload;
+        length = sizeof(native_payload_t);
+    }
+
+    lora_send(payload, length);
+}
+
+void profile_send_ble()
+{
+    ble_set_battery(battery);
+    ble_set_enviromental(humidity, temperature);
 }
 
 void profile_execute(bool lora, bool ble)
 {
     ESP_LOGI(TAG, "Execute");
-
     uint8_t battery;
     float battery_voltage;
     battery_measure(&battery, &battery_voltage);
@@ -59,23 +102,9 @@ void profile_execute(bool lora, bool ble)
     float humidity, temperature;
     sensor_read(&humidity, &temperature);
 
-    gpio_set_level(GPIO_POWER, 1);
-    vTaskDelay(200 / portTICK_PERIOD_MS);
-
-    int adc_reading;
-    for (int i = 0; i < 30; i++) {
-        adc_reading = adc1_get_raw(INPUT_CHANNEL);
-        ESP_LOGI(TAG, "Voltage %d %dmV", adc_reading, esp_adc_cal_raw_to_voltage(adc_reading, &adc_char));
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-    }
-    gpio_set_level(GPIO_POWER, 0);
-
-    float voltage = esp_adc_cal_raw_to_voltage(adc_reading, &adc_char) / 1000.0;
-
     if (ble) {
         ble_set_battery(battery);
         ble_set_enviromental(humidity, temperature);
-        //TODO ble_set_soil_mosture
     }
 
     if (lora) {
@@ -89,11 +118,10 @@ void profile_execute(bool lora, bool ble)
             //cayenne lpp payload
             uint8_t humidity_val = humidity * 2;
             int16_t temperature_val = temperature * 10;
-            int16_t soil_moisture = voltage * 100;
             int16_t battery_val = battery_voltage * 100;
 
             uint8_t len = 0;
-            uint8_t lpp[19];
+            uint8_t lpp[11];
             lpp[len++] = 1;
             lpp[len++] = CAYENNE_LPP_RELATIVE_HUMIDITY;
             lpp[len++] = humidity_val;
@@ -103,12 +131,10 @@ void profile_execute(bool lora, bool ble)
             lpp[len++] = temperature_val;
             lpp[len++] = 3;
             lpp[len++] = CAYENNE_LPP_ANALOG_INPUT;
-            lpp[len++] = battery >> 8;
-            lpp[len++] = battery;
-            lpp[len++] = 4;
-            lpp[len++] = CAYENNE_LPP_ANALOG_INPUT;
-            lpp[len++] = soil_moisture >> 8;
-            lpp[len++] = soil_moisture;
+            lpp[len++] = battery_val >> 8;
+            lpp[len++] = battery_val;
+
+            ESP_LOG_BUFFER_HEX_LEVEL(TAG, lpp, len, ESP_LOG_INFO);
 
             payload = lpp;
             length = len;
@@ -118,20 +144,18 @@ void profile_execute(bool lora, bool ble)
             native_payload.humidity = humidity * 100;
             native_payload.temperature = temperature * 100;
             native_payload.battery = battery;
-            native_payload.soil_moisture = voltage * 100;
 
             payload = (uint8_t*) &native_payload;
             length = sizeof(native_payload_t);
         }
 
-        lora_send((uint8_t*) payload, length);
+        lora_send(payload, length);
     }
 }
 
 void profile_deinit()
 {
     ESP_LOGI(TAG, "Deinit");
-    gpio_set_direction(GPIO_POWER, GPIO_MODE_DISABLE);
 }
 
-#endif /* SENSOR_PROFILE_SOIL_MOSTURE */
+#endif /* CONFIG_SENSOR_PROFILE_DEFAULT */

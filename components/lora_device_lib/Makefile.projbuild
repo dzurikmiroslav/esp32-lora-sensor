@@ -1,0 +1,1 @@
+CPPFLAGS += -DLDL_TARGET_INCLUDE='"ldl_config.h"'

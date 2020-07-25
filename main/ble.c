@@ -25,8 +25,9 @@ static uint8_t adv_config_done = 0;
 QueueHandle_t ble_event_queue;
 
 // @formatter:off
-static uint8_t service_uuid[32] = {
+static uint8_t service_uuid[48] = {
         0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xC8, 0x00, 0x00, 0x00,
+        0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0x18, 0x1A, 0x00, 0x00,
         0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0x18, 0x0F, 0x00, 0x00
 };
 
@@ -79,21 +80,21 @@ enum
     LORA_IDX_CHAR_VAL_PERIOD,
     LORA_IDX_CHAR_CFG_PERIOD,
 
-    LORA_IDX_CHAR_APP_EUI,
-    LORA_IDX_CHAR_VAL_APP_EUI,
-    LORA_IDX_CHAR_CFG_APP_EUI,
+    LORA_IDX_CHAR_JOIN_EUI,
+    LORA_IDX_CHAR_VAL_JOIN_EUI,
+    LORA_IDX_CHAR_CFG_JOIN_EUI,
 
     LORA_IDX_CHAR_DEV_EUI,
     LORA_IDX_CHAR_VAL_DEV_EUI,
     LORA_IDX_CHAR_CFG_DEV_EUI,
 
-    LORA_IDX_CHAR_DEV_KEY,
-    LORA_IDX_CHAR_VAL_DEV_KEY,
-    LORA_IDX_CHAR_CFG_DEV_KEY,
+    LORA_IDX_CHAR_APP_KEY,
+    LORA_IDX_CHAR_VAL_APP_KEY,
+    LORA_IDX_CHAR_CFG_APP_KEY,
 
-    LORA_IDX_CHAR_PROFILE,
-    LORA_IDX_CHAR_VAL_PROFILE,
-    LORA_IDX_CHAR_CFG_PROFILE,
+    LORA_IDX_CHAR_NWK_KEY,
+    LORA_IDX_CHAR_VAL_NWK_KEY,
+    LORA_IDX_CHAR_CFG_NWK_KEY,
 
     LORA_IDX_CHAR_PAYL_FMT,
     LORA_IDX_CHAR_VAL_PAYL_FMT,
@@ -136,12 +137,12 @@ static const uint16_t GATTS_SERVICE_UUID_LORA       = 0xC800;
 static const uint16_t GATTS_SERVICE_UUID_ENV_SENS   = 0x181A;
 static const uint16_t GATTS_SERVICE_UUID_BAT_SERV   = 0x180F;
 static const uint16_t GATTS_CHAR_UUID_PERIOD        = 0xC901;
-static const uint16_t GATTS_CHAR_UUID_APP_EUI       = 0xC902;
+static const uint16_t GATTS_CHAR_UUID_JOIN_EUI      = 0xC902;
 static const uint16_t GATTS_CHAR_UUID_DEV_EUI       = 0xC903;
-static const uint16_t GATTS_CHAR_UUID_DEV_KEY       = 0xC904;
-static const uint16_t GATTS_CHAR_UUID_PROFILE       = 0xC905;
-static const uint16_t GATTS_CHAR_UUID_PAYL_FMT      = 0xC906;
-static const uint16_t GATTS_CHAR_UUID_CONFM         = 0xC907;
+static const uint16_t GATTS_CHAR_UUID_APP_KEY       = 0xC904;
+static const uint16_t GATTS_CHAR_UUID_NWK_KEY       = 0xC905;
+static const uint16_t GATTS_CHAR_UUID_PAYL_FMT      = 0xC907;
+static const uint16_t GATTS_CHAR_UUID_CONFM         = 0xC908;
 static const uint16_t GATTS_CHAR_UUID_HUM           = 0x2A6F;
 static const uint16_t GATTS_CHAR_UUID_TEMP          = 0x2A6E;
 static const uint16_t GATTS_CHAR_UUID_BAT_LVL       = 0x2A19;
@@ -160,8 +161,6 @@ static uint8_t dev_eui_ccc[2] = {0x00, 0x00};
 static uint8_t app_eui_ccc[2] = {0x00, 0x00};
 
 static uint8_t dev_key_ccc[2] = {0x00, 0x00};
-
-static uint8_t profile_ccc[2] = {0x00, 0x00};
 
 static uint8_t payl_fmt_ccc[2] = {0x00, 0x00};
 
@@ -187,11 +186,11 @@ static const esp_gatts_attr_db_t gatt_lora_db[LORA_IDX_NB] = {
     [LORA_IDX_CHAR_CFG_PERIOD] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)period_ccc}},
 
-    [LORA_IDX_CHAR_APP_EUI] =
+    [LORA_IDX_CHAR_JOIN_EUI] =
          {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_write}},
-    [LORA_IDX_CHAR_VAL_APP_EUI] =
-         {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_APP_EUI, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 8 * sizeof(uint8_t), 0, NULL}},
-    [LORA_IDX_CHAR_CFG_APP_EUI] =
+    [LORA_IDX_CHAR_VAL_JOIN_EUI] =
+         {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_JOIN_EUI, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 8 * sizeof(uint8_t), 0, NULL}},
+    [LORA_IDX_CHAR_CFG_JOIN_EUI] =
          {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)app_eui_ccc}},
 
     [LORA_IDX_CHAR_DEV_EUI] =
@@ -201,19 +200,19 @@ static const esp_gatts_attr_db_t gatt_lora_db[LORA_IDX_NB] = {
     [LORA_IDX_CHAR_CFG_DEV_EUI] =
          {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)dev_eui_ccc}},
 
-    [LORA_IDX_CHAR_DEV_KEY] =
-         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_write}},
-    [LORA_IDX_CHAR_VAL_DEV_KEY] =
-         {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_DEV_KEY, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 16 * sizeof(uint8_t), 0, NULL}},
-    [LORA_IDX_CHAR_CFG_DEV_KEY] =
-         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)dev_key_ccc}},
+    [LORA_IDX_CHAR_APP_KEY] =
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_write}},
+    [LORA_IDX_CHAR_VAL_APP_KEY] =
+        {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_APP_KEY, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 16 * sizeof(uint8_t), 0, NULL}},
+    [LORA_IDX_CHAR_CFG_APP_KEY] =
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)dev_key_ccc}},
 
-    [LORA_IDX_CHAR_PROFILE] =
-         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_write}},
-    [LORA_IDX_CHAR_VAL_PROFILE] =
-         {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_PROFILE, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(uint8_t), 0, NULL}},
-    [LORA_IDX_CHAR_CFG_PROFILE] =
-         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)profile_ccc}},
+    [LORA_IDX_CHAR_NWK_KEY] =
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_write}},
+    [LORA_IDX_CHAR_VAL_NWK_KEY] =
+        {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&GATTS_CHAR_UUID_NWK_KEY, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 16 * sizeof(uint8_t), 0, NULL}},
+    [LORA_IDX_CHAR_CFG_NWK_KEY] =
+        {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)dev_key_ccc}},
 
     [LORA_IDX_CHAR_PAYL_FMT] =
          {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, sizeof(uint8_t), sizeof(uint8_t), (uint8_t *)&char_prop_read_write}},
@@ -261,7 +260,8 @@ static const esp_gatts_attr_db_t gatt_bat_serv_db[BAT_SERV_IDX_NB] = {
     [BAT_SERV_IDX_CHAR_CFG_BAT_LVL] =
         {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, 2 * sizeof(uint8_t), 2 * sizeof(uint8_t), (uint8_t *)bat_lvl_ccc}},
 };
-//@formatter:on
+// @formatter:on
+
 uint16_t lora_handle_table[LORA_IDX_NB];
 uint16_t bat_serv_handle_table[BAT_SERV_IDX_NB];
 uint16_t env_sens_handle_table[ENV_SENS_IDX_NB];
@@ -281,18 +281,18 @@ void gatts_read(esp_gatt_if_t gatts_if, struct gatts_read_evt_param read)
     if (read.handle == lora_handle_table[LORA_IDX_CHAR_VAL_PERIOD]) {
         rsp.attr_value.len = sizeof(uint16_t);
         nvs_get_u16(storage, STORAGE_KEY_PERIOD, (uint16_t*) rsp.attr_value.value);
-    } else if (read.handle == lora_handle_table[LORA_IDX_CHAR_VAL_APP_EUI]) {
+    } else if (read.handle == lora_handle_table[LORA_IDX_CHAR_VAL_JOIN_EUI]) {
         rsp.attr_value.len = length = sizeof(uint8_t) * 8;
-        nvs_get_blob(storage, STORAGE_KEY_APP_EUI, (void*) rsp.attr_value.value, &length);
+        nvs_get_blob(storage, STORAGE_KEY_LORA_JOIN_EUI, (void*) rsp.attr_value.value, &length);
     } else if (read.handle == lora_handle_table[LORA_IDX_CHAR_VAL_DEV_EUI]) {
         rsp.attr_value.len = length = sizeof(uint8_t) * 8;
-        nvs_get_blob(storage, STORAGE_KEY_DEV_EUI, (void*) rsp.attr_value.value, &length);
-    } else if (read.handle == lora_handle_table[LORA_IDX_CHAR_VAL_DEV_KEY]) {
+        nvs_get_blob(storage, STORAGE_KEY_LORA_DEV_EUI, (void*) rsp.attr_value.value, &length);
+    } else if (read.handle == lora_handle_table[LORA_IDX_CHAR_VAL_APP_KEY]) {
         rsp.attr_value.len = length = sizeof(uint8_t) * 16;
-        nvs_get_blob(storage, STORAGE_KEY_DEV_KEY, (void*) rsp.attr_value.value, &length);
-    } else if (read.handle == lora_handle_table[LORA_IDX_CHAR_VAL_PROFILE]) {
-        rsp.attr_value.len = sizeof(uint8_t);
-        nvs_get_u8(storage, STORAGE_KEY_PROFILE, (uint8_t*) rsp.attr_value.value);
+        nvs_get_blob(storage, STORAGE_KEY_LORA_APP_KEY, (void*) rsp.attr_value.value, &length);
+    } else if (read.handle == lora_handle_table[LORA_IDX_CHAR_VAL_NWK_KEY]) {
+        rsp.attr_value.len = length = sizeof(uint8_t) * 16;
+        nvs_get_blob(storage, STORAGE_KEY_LORA_NWK_KEY, (void*) rsp.attr_value.value, &length);
     } else if (read.handle == lora_handle_table[LORA_IDX_CHAR_VAL_PAYL_FMT]) {
         rsp.attr_value.len = sizeof(uint8_t);
         nvs_get_u8(storage, STORAGE_KEY_PAYL_FMT, (uint8_t*) rsp.attr_value.value);
@@ -315,23 +315,21 @@ void gatts_write(esp_gatt_if_t gatts_if, struct gatts_write_evt_param write)
         nvs_set_u16(storage, STORAGE_KEY_PERIOD, val);
         ble_event = BLE_EVENT_PERIOD_UPDATE;
         xQueueSend(ble_event_queue, &ble_event, 0);
-    } else if (write.handle == lora_handle_table[LORA_IDX_CHAR_VAL_APP_EUI]) {
-        nvs_set_blob(storage, STORAGE_KEY_APP_EUI, write.value, 8 * sizeof(uint8_t));
+    } else if (write.handle == lora_handle_table[LORA_IDX_CHAR_VAL_JOIN_EUI]) {
+        nvs_set_blob(storage, STORAGE_KEY_LORA_JOIN_EUI, write.value, 8 * sizeof(uint8_t));
         ble_event = BLE_EVENT_LORA_UPDATED;
         xQueueSend(ble_event_queue, &ble_event, 0);
     } else if (write.handle == lora_handle_table[LORA_IDX_CHAR_VAL_DEV_EUI]) {
-        nvs_set_blob(storage, STORAGE_KEY_DEV_EUI, write.value, 8 * sizeof(uint8_t));
+        nvs_set_blob(storage, STORAGE_KEY_LORA_DEV_EUI, write.value, 8 * sizeof(uint8_t));
         ble_event = BLE_EVENT_LORA_UPDATED;
         xQueueSend(ble_event_queue, &ble_event, 0);
-    } else if (write.handle == lora_handle_table[LORA_IDX_CHAR_VAL_DEV_KEY]) {
-        nvs_set_blob(storage, STORAGE_KEY_DEV_KEY, write.value, 16 * sizeof(uint8_t));
+    } else if (write.handle == lora_handle_table[LORA_IDX_CHAR_VAL_APP_KEY]) {
+        nvs_set_blob(storage, STORAGE_KEY_LORA_APP_KEY, write.value, 16 * sizeof(uint8_t));
         ble_event = BLE_EVENT_LORA_UPDATED;
         xQueueSend(ble_event_queue, &ble_event, 0);
-    } else if (write.handle == lora_handle_table[LORA_IDX_CHAR_VAL_PROFILE]) {
-        uint8_t val;
-        memcpy(&val, write.value, sizeof(uint8_t));
-        nvs_set_u8(storage, STORAGE_KEY_PROFILE, val);
-        ble_event = BLE_EVENT_PROFILE_UPDATE;
+    } else if (write.handle == lora_handle_table[LORA_IDX_CHAR_VAL_NWK_KEY]) {
+        nvs_set_blob(storage, STORAGE_KEY_LORA_NWK_KEY, write.value, 16 * sizeof(uint8_t));
+        ble_event = BLE_EVENT_LORA_UPDATED;
         xQueueSend(ble_event_queue, &ble_event, 0);
     } else if (write.handle == lora_handle_table[LORA_IDX_CHAR_VAL_PAYL_FMT]) {
         uint8_t val;
@@ -439,10 +437,11 @@ void ble_init()
 {
     ble_event_queue = xQueueCreate(5, sizeof(ble_event_t));
 
-   // ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
+    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT()
     ;
+
     ESP_ERROR_CHECK(esp_bt_controller_init(&bt_cfg));
 
     ESP_ERROR_CHECK(esp_bt_controller_enable(ESP_BT_MODE_BLE));
@@ -457,6 +456,11 @@ void ble_init()
 
     ESP_ERROR_CHECK(esp_ble_gatt_set_local_mtu(500));
     ESP_ERROR_CHECK(esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_N12));
+}
+
+bool ble_has_context()
+{
+    return ble_gatts_if != 0;
 }
 
 void ble_deinit()
@@ -476,15 +480,16 @@ void ble_deinit()
     vQueueDelete(ble_event_queue);
 }
 
-void ble_set_battery(uint8_t battery) {
+void ble_set_battery(uint8_t battery)
+{
     bat_lvl_val = battery;
 
     esp_ble_gatts_set_attr_value(bat_serv_handle_table[BAT_SERV_IDX_CHAR_BAT_LVL], sizeof(uint8_t),
-                (uint8_t*) &bat_lvl_val);
+            (uint8_t*) &bat_lvl_val);
 
     if (ble_has_connection) {
-           esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, bat_serv_handle_table[BAT_SERV_IDX_CHAR_BAT_LVL],
-                   sizeof(uint8_t), (uint8_t*) &bat_lvl_val, false);
+        esp_ble_gatts_send_indicate(ble_gatts_if, ble_connection_id, bat_serv_handle_table[BAT_SERV_IDX_CHAR_BAT_LVL],
+                sizeof(uint8_t), (uint8_t*) &bat_lvl_val, false);
     }
 }
 

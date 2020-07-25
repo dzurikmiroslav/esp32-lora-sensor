@@ -1,3 +1,3 @@
-[submodule "components/lmic"]
-	path = components/lmic
-	url = https://github.com/mcci-catena/arduino-lmic.git
+[submodule "components/lora_device_lib/lora_device_lib"]
+	path = components/lora_device_lib/lora_device_lib
+	url = https://github.com/cjhdev/lora_device_lib.git
